@@ -945,18 +945,16 @@ export default function Home() {
             )}
         </div>
 
-        {/* Edit Item Dialog - temporarily disabled */}
-        {false && (
-          <EditItemDialog
-            isOpen={isEditDialogOpen}
-            onClose={() => {
-              setIsEditDialogOpen(false)
-              setEditingItem(null)
-            }}
-            item={editingItem}
-            onSave={handleSaveEdit}
-          />
-        )}
+        {/* Edit Item Dialog */}
+        <EditItemDialog
+          isOpen={isEditDialogOpen}
+          onClose={() => {
+            setIsEditDialogOpen(false)
+            setEditingItem(null)
+          }}
+          item={editingItem}
+          onSave={handleSaveEdit}
+        />
       </div>
     </div>
   )
