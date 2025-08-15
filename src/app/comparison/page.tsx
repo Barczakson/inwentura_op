@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { BarChart, ArrowLeft, FileSpreadsheet } from 'lucide-react'
+import { BarChart, ArrowLeft, FileSpreadsheet, Check, Plus } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import Link from 'next/link'
 
@@ -60,11 +60,11 @@ export default function ComparisonPage() {
 
   const loadData = async () => {
     try {
-      console.log('🔄 loadData: Fetching from API...')
+      console.log('loadData: Fetching from API...')
       const response = await fetch('/api/excel/data?includeRaw=true')
       if (response.ok) {
         const data = await response.json()
-        console.log('📊 loadData: Received data:', {
+        console.log('loadData: Received data:', {
           aggregatedCount: data.aggregated?.length || 0,
           firstAggregated: data.aggregated?.[0]?.name || 'none'
         })
@@ -209,7 +209,7 @@ export default function ComparisonPage() {
         alerts.push({
           level: 'critical',
           type: 'missing_item',
-          message: `🚨 BRAK PRODUKTU: ${diff.name} (${diff.quantity1} ${diff.unit}) - produkt całkowicie zniknął z inwentarza!`,
+          message: `BRAK PRODUKTU: ${diff.name} (${diff.quantity1} ${diff.unit}) - produkt całkowicie zniknął z inwentarza!`,
           item: diff
         })
       } else if (diff.type === 'decrease' && Math.abs(diff.difference) >= 10) {
@@ -217,21 +217,21 @@ export default function ComparisonPage() {
         alerts.push({
           level: severity,
           type: 'significant_decrease',
-          message: `⚠️ ZNACZNY SPADEK: ${diff.name} - spadek o ${Math.abs(diff.difference).toFixed(1)} ${diff.unit} (${diff.percentChange?.toFixed(1)}%)`,
+          message: `ZNACZNY SPADEK: ${diff.name} - spadek o ${Math.abs(diff.difference).toFixed(1)} ${diff.unit} (${diff.percentChange?.toFixed(1)}%)`,
           item: diff
         })
       } else if (diff.type === 'increase' && diff.difference >= 20) {
         alerts.push({
           level: 'info',
           type: 'significant_increase',
-          message: `📈 WZROST: ${diff.name} - wzrost o ${diff.difference.toFixed(1)} ${diff.unit} (${diff.percentChange?.toFixed(1)}%)`,
+          message: `WZROST: ${diff.name} - wzrost o ${diff.difference.toFixed(1)} ${diff.unit} (${diff.percentChange?.toFixed(1)}%)`,
           item: diff
         })
       } else if (diff.type === 'new') {
         alerts.push({
           level: 'info',
           type: 'new_item',
-          message: `➕ NOWY PRODUKT: ${diff.name} (${diff.quantity2} ${diff.unit})`,
+          message: `NOWY PRODUKT: ${diff.name} (${diff.quantity2} ${diff.unit})`,
           item: diff
         })
       }
@@ -256,7 +256,7 @@ export default function ComparisonPage() {
               </Button>
             </Link>
           </div>
-          <h1 className="text-3xl font-bold">🔄 Porównanie Miesięczne Inwentarza</h1>
+          <h1 className="text-3xl font-bold">Porównanie Miesięczne Inwentarza</h1>
           <p className="text-muted-foreground">
             Porównaj bieżący inwentarz z poprzednim miesiącem i otrzymaj inteligentne analizy zmian
           </p>
@@ -270,7 +270,7 @@ export default function ComparisonPage() {
         {/* Main Comparison Card */}
         <Card>
           <CardHeader>
-            <CardTitle>🔄 Porównanie Miesięczne Inwentarza</CardTitle>
+            <CardTitle>Porównanie Miesięczne Inwentarza</CardTitle>
             <CardDescription>
               Porównaj bieżący inwentarz z poprzednim miesiącem i otrzymaj inteligentne analizy zmian
             </CardDescription>
@@ -285,7 +285,7 @@ export default function ComparisonPage() {
                 <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-sm sm:text-base">📊 Dane Bieżące (Obecny miesiąc)</CardTitle>
+                      <CardTitle className="text-sm sm:text-base">Dane Bieżące (Obecny miesiąc)</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="space-y-3">
@@ -333,7 +333,7 @@ export default function ComparisonPage() {
                   {/* Previous Month Upload */}
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-sm sm:text-base">📅 Plik Poprzedniego Miesiąca</CardTitle>
+                      <CardTitle className="text-sm sm:text-base">Plik Poprzedniego Miesiąca</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="space-y-3">
@@ -350,8 +350,8 @@ export default function ComparisonPage() {
                           className="block w-full text-xs sm:text-sm text-gray-500 file:mr-2 sm:file:mr-4 file:py-2 file:px-2 sm:file:px-4 file:rounded-lg file:border-0 file:text-xs sm:file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                         />
                         {previousMonthFile && (
-                          <p className="text-xs text-green-600 break-all">
-                            ✓ Wybrano: {previousMonthFile.name}
+                          <p className="text-xs text-green-600 break-all flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Wybrano: {previousMonthFile.name}
                           </p>
                         )}
                       </div>
@@ -378,7 +378,7 @@ export default function ComparisonPage() {
                     {/* Alerts Section */}
                     {comparisonAlerts.length > 0 && (
                       <div className="space-y-4">
-                        <h3 className="text-lg font-semibold">🚨 Ważne Alerty</h3>
+                        <h3 className="text-lg font-semibold">Ważne Alerty</h3>
                         <div className="space-y-2">
                           {comparisonAlerts.map((alert, index) => (
                             <div
@@ -400,7 +400,7 @@ export default function ComparisonPage() {
 
                     {/* Detailed Comparison */}
                     <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">📊 Szczegółowe Porównanie</h3>
+                      <h3 className="text-lg font-semibold">Szczegółowe Porównanie</h3>
                       
                       {/* Summary Stats */}
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -448,16 +448,16 @@ export default function ComparisonPage() {
                             Wszystkie ({comparisonData.length})
                           </TabsTrigger>
                           <TabsTrigger value="missing" className="text-xs sm:text-sm text-red-600">
-                            🚨 Brakujące ({comparisonData.filter(d => d.type === 'missing').length})
+                            Brakujące ({comparisonData.filter(d => d.type === 'missing').length})
                           </TabsTrigger>
                           <TabsTrigger value="decrease" className="text-xs sm:text-sm text-yellow-600">
-                            ⬇️ Spadki ({comparisonData.filter(d => d.type === 'decrease').length})
+                            Spadki ({comparisonData.filter(d => d.type === 'decrease').length})
                           </TabsTrigger>
                           <TabsTrigger value="increase" className="text-xs sm:text-sm text-green-600">
-                            ⬆️ Wzrosty ({comparisonData.filter(d => d.type === 'increase').length})
+                            Wzrosty ({comparisonData.filter(d => d.type === 'increase').length})
                           </TabsTrigger>
                           <TabsTrigger value="new" className="text-xs sm:text-sm text-blue-600">
-                            ➕ Nowe ({comparisonData.filter(d => d.type === 'new').length})
+                            Nowe ({comparisonData.filter(d => d.type === 'new').length})
                           </TabsTrigger>
                         </TabsList>
 
@@ -493,12 +493,12 @@ export default function ComparisonPage() {
                                         }
                                       >
                                         {diff.type === 'missing'
-                                          ? '🚨 Brak'
+                                          ? 'Brak'
                                           : diff.type === 'decrease'
-                                          ? '⬇️ Spadek'
+                                          ? 'Spadek'
                                           : diff.type === 'increase'
-                                          ? '⬆️ Wzrost'
-                                          : '➕ Nowy'}
+                                          ? 'Wzrost'
+                                          : 'Nowy'}
                                       </Badge>
                                       <h4 className="font-medium text-sm sm:text-base">{diff.name}</h4>
                                     </div>
@@ -547,7 +547,7 @@ export default function ComparisonPage() {
                               <div key={index} className="p-4 rounded-lg border-l-4 border-red-500 bg-red-50">
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                   <div className="flex-1">
-                                    <h4 className="font-medium text-red-800 mb-2">🚨 {diff.name}</h4>
+                                    <h4 className="font-medium text-red-800 mb-2">{diff.name}</h4>
                                     <p className="text-sm text-red-700">
                                       Produkt całkowicie zniknął z inwentarza!
                                     </p>
@@ -569,7 +569,7 @@ export default function ComparisonPage() {
                               <div key={index} className="p-4 rounded-lg border-l-4 border-yellow-500 bg-yellow-50">
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                   <div className="flex-1">
-                                    <h4 className="font-medium text-yellow-800 mb-2">⬇️ {diff.name}</h4>
+                                    <h4 className="font-medium text-yellow-800 mb-2">{diff.name}</h4>
                                     <div className="grid grid-cols-2 gap-4 text-sm">
                                       <div>
                                         <span className="text-yellow-600">Było: </span>
@@ -602,7 +602,7 @@ export default function ComparisonPage() {
                               <div key={index} className="p-4 rounded-lg border-l-4 border-green-500 bg-green-50">
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                   <div className="flex-1">
-                                    <h4 className="font-medium text-green-800 mb-2">⬆️ {diff.name}</h4>
+                                    <h4 className="font-medium text-green-800 mb-2">{diff.name}</h4>
                                     <div className="grid grid-cols-2 gap-4 text-sm">
                                       <div>
                                         <span className="text-green-600">Było: </span>
@@ -635,7 +635,7 @@ export default function ComparisonPage() {
                               <div key={index} className="p-4 rounded-lg border-l-4 border-blue-500 bg-blue-50">
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                   <div className="flex-1">
-                                    <h4 className="font-medium text-blue-800 mb-2">➕ {diff.name}</h4>
+                                    <h4 className="font-medium text-blue-800 mb-2">{diff.name}</h4>
                                     <p className="text-sm text-blue-700">
                                       Nowy produkt w inwentarzu
                                     </p>

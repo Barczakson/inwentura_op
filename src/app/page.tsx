@@ -26,6 +26,7 @@ import { useDropzone } from 'react-dropzone'
 import { DataTable } from '@/components/data-table'
 import { EditItemDialog } from '@/components/edit-item-dialog'
 import { formatQuantityWithConversion } from '@/lib/unit-conversion'
+import { getFileColorClass, getFileBorderColor, getFileBackgroundColor } from '@/lib/colors'
 import { toast } from '@/hooks/use-toast'
 import Link from 'next/link'
 
@@ -46,6 +47,7 @@ interface AggregatedItem {
   fileId?: string
   sourceFiles?: string[]
   count?: number
+  isAggregated?: boolean // Flag to indicate if item is aggregated
 }
 
 interface UploadedFile {
@@ -110,16 +112,26 @@ export default function Home() {
 
   const loadData = async () => {
     try {
-      console.log('🔄 loadData: Fetching from API...')
+      console.log('loadData: Fetching from API...')
       const response = await fetch('/api/excel/data?includeRaw=true')
       if (response.ok) {
         const data = await response.json()
-        console.log('📊 loadData: Received data:', {
+        console.log('loadData: Received data:', {
           aggregatedCount: data.aggregated?.length || 0,
           rawCount: data.raw?.length || 0,
           firstAggregated: data.aggregated?.[0]?.name || 'none'
         })
-        setAggregatedData(data.aggregated || [])
+        
+        // Add isAggregated flag to aggregated data
+        const aggregatedWithData = (data.aggregated || []).map((item: any) => ({
+          ...item,
+          isAggregated: (item.sourceFiles && item.sourceFiles.length > 1) || 
+                       (item.count && item.count > 1) ||
+                       (item.sourceFiles && item.sourceFiles.length > 0 && 
+                        !item.fileId) // If it has sourceFiles but no direct fileId, it's aggregated
+        }))
+        
+        setAggregatedData(aggregatedWithData)
         setExcelData(data.raw || [])
         console.log('✅ loadData: State updated')
       } else {
@@ -395,8 +407,18 @@ export default function Home() {
       const response = await fetch(`/api/excel/data?fileId=${fileId}&includeRaw=true`)
       if (response.ok) {
         const data = await response.json()
+        
+        // Add isAggregated flag to aggregated data
+        const aggregatedWithData = (data.aggregated || []).map((item: any) => ({
+          ...item,
+          isAggregated: (item.sourceFiles && item.sourceFiles.length > 1) || 
+                       (item.count && item.count > 1) ||
+                       (item.sourceFiles && item.sourceFiles.length > 0 && 
+                        !item.fileId) // If it has sourceFiles but no direct fileId, it's aggregated
+        }))
+        
         setExcelData(data.raw || [])
-        setAggregatedData(data.aggregated || [])
+        setAggregatedData(aggregatedWithData)
         
         // Find the file name
         const file = uploadedFiles.find(f => f.id === fileId)
@@ -557,11 +579,9 @@ export default function Home() {
 
       if (response.ok) {
         setUploadedFiles(prev => prev.filter(file => file.id !== fileId))
-        // If this was the currently viewed file, clear the data
-        if (excelData.length > 0 || aggregatedData.length > 0) {
-          setExcelData([])
-          setAggregatedData([])
-        }
+        // Reload all data to get the updated aggregation from remaining files
+        await loadData()
+        await loadUploadedFiles()
         toast({
           title: "Success",
           description: "File deleted successfully.",
@@ -604,17 +624,6 @@ export default function Home() {
             <span>Surowe: {isMounted ? excelData.length : '...'}</span>
             <span>Pliki: {isMounted ? uploadedFiles.length : '...'}</span>
           </div>
-          {currentView === 'file' && (
-            <div className="mt-4">
-              <Button
-                onClick={handleReturnToGeneralView}
-                variant="outline"
-                className="mx-auto"
-              >
-                ← Powrót do widoku ogólnego
-              </Button>
-            </div>
-          )}
         </div>
 
         {/* File Upload Section */}
@@ -679,10 +688,13 @@ export default function Home() {
                 {uploadedFiles.map((uploadedFile) => (
                   <div
                     key={uploadedFile.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group"
+                    className={`flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group ${(uploadedFile.id && typeof uploadedFile.id === 'string') ? getFileBorderColor(uploadedFile.id) : ''}`}
                     onClick={() => handleViewFileData(uploadedFile.id)}
                   >
                     <div className="flex items-center gap-3">
+                      {(uploadedFile.id && typeof uploadedFile.id === 'string') && (
+                        <div className={`w-4 h-4 rounded-full border-2 border-white shadow ${getFileBackgroundColor(uploadedFile.id)}`}></div>
+                      )}
                       <FileSpreadsheet className="w-8 h-8 text-green-600" />
                       <div>
                         <p className="font-medium text-sm">{uploadedFile.name}</p>
@@ -727,7 +739,7 @@ export default function Home() {
           <Link href="/comparison">
             <Button variant="outline" className="gap-2">
               <BarChart className="w-4 h-4" />
-              🔄 Porównanie Miesięczne
+              Porównanie Miesięczne
             </Button>
           </Link>
         </div>
@@ -748,8 +760,9 @@ export default function Home() {
                         </div>
                         <Button
                           onClick={handleReturnToGeneralView}
-                          variant="outline"
-                          className="gap-2"
+                          variant="default"
+                          size="lg"
+                          className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-lg"
                         >
                           ← Powrót do podsumowania wszystkich plików
                         </Button>
@@ -821,9 +834,23 @@ export default function Home() {
                       <p className="text-muted-foreground">Brak zagregowanych danych. Prześlij plik Excel, aby rozpocząć.</p>
                     </div>
                   ) : (
-                    <div className="p-4 bg-muted rounded">
-                      <p>DataTable placeholder - {aggregatedData.length} items</p>
-                    </div>
+                    <DataTable
+                      data={aggregatedData}
+                      onEdit={handleEditItemById}
+                      onDelete={handleDeleteItem}
+                      inlineEditingItem={inlineEditingItem}
+                      inlineEditValue={inlineEditValue}
+                      onInlineEditValueChange={(value) => setInlineEditValue(value)}
+                      bulkEditMode={bulkEditMode}
+                      selectedItems={selectedItems}
+                      onSelectItem={handleSelectItem}
+                      onSelectAll={handleSelectAll}
+                      showAggregated={true}
+                      uploadedFiles={uploadedFiles}
+                      onStartInlineEdit={handleStartInlineEdit}
+                      onCancelInlineEdit={handleCancelInlineEdit}
+                      onSaveInlineEdit={handleSaveInlineEdit}
+                    />
                   )}
                 </CardContent>
               </Card>
@@ -855,9 +882,18 @@ export default function Home() {
                       <p className="text-muted-foreground">Brak surowych danych. Prześlij plik Excel, aby rozpocząć.</p>
                     </div>
                   ) : (
-                    <div className="p-4 bg-muted rounded">
-                      <p>Raw DataTable placeholder - {excelData.length} items</p>
-                    </div>
+                    <DataTable
+                      data={excelData}
+                      onEdit={handleEditItemById}
+                      onDelete={handleDeleteItem}
+                      uploadedFiles={uploadedFiles}
+                      onStartInlineEdit={handleStartInlineEdit}
+                      onCancelInlineEdit={handleCancelInlineEdit}
+                      onSaveInlineEdit={handleSaveInlineEdit}
+                      onInlineEditValueChange={(value) => setInlineEditValue(value)}
+                      inlineEditingItem={inlineEditingItem}
+                      inlineEditValue={inlineEditValue}
+                    />
                   )}
                 </CardContent>
               </Card>

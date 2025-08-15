@@ -79,7 +79,7 @@ describe('Monthly Comparison Integration Tests', () => {
       fireEvent.change(fileInput)
 
       await waitFor(() => {
-        expect(screen.getByText('✓ Wybrano: previous-month.xlsx')).toBeInTheDocument()
+        expect(screen.getByText('Wybrano: previous-month.xlsx')).toBeInTheDocument()
       })
 
       // Click compare button

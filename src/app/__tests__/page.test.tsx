@@ -215,7 +215,7 @@ describe('Home Page', () => {
 
   it('validates manual entry form', async () => {
     const user = userEvent.setup()
-    const { toast } = require('@/hooks/use-toast')
+    const { toast } = jest.requireMock('@/hooks/use-toast')
 
     render(<Home />)
 

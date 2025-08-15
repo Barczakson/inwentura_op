@@ -27,7 +27,7 @@ describe('Comparison Page', () => {
 
   it('renders the comparison page title', () => {
     render(<ComparisonPage />)
-    expect(screen.getByText('🔄 Porównanie Miesięczne Inwentarza')).toBeInTheDocument()
+    expect(screen.getByText('Porównanie Miesięczne Inwentarza')).toBeInTheDocument()
     expect(screen.getByText(/Porównaj bieżący inwentarz z poprzednim miesiącem/)).toBeInTheDocument()
   })
 
@@ -39,14 +39,14 @@ describe('Comparison Page', () => {
 
   it('shows current month data selection options', () => {
     render(<ComparisonPage />)
-    expect(screen.getByText('📊 Dane Bieżące (Obecny miesiąc)')).toBeInTheDocument()
+    expect(screen.getByText('Dane Bieżące (Obecny miesiąc)')).toBeInTheDocument()
     expect(screen.getByText('Użyj bieżącej agregacji')).toBeInTheDocument()
     expect(screen.getByText('Prześlij nowy plik')).toBeInTheDocument()
   })
 
   it('shows previous month file upload section', () => {
     render(<ComparisonPage />)
-    expect(screen.getByText('📅 Plik Poprzedniego Miesiąca')).toBeInTheDocument()
+    expect(screen.getByText('Plik Poprzedniego Miesiąca')).toBeInTheDocument()
     expect(screen.getByText('Prześlij plik Excel z poprzedniego miesiąca')).toBeInTheDocument()
   })
 
@@ -107,7 +107,7 @@ describe('Comparison Page', () => {
       await user.upload(fileInput as HTMLInputElement, file)
 
       await waitFor(() => {
-        expect(screen.getByText('✓ Wybrano: previous-month.xlsx')).toBeInTheDocument()
+        expect(screen.getByText('Wybrano: previous-month.xlsx')).toBeInTheDocument()
       })
     }
   })
@@ -120,7 +120,7 @@ describe('Comparison Page', () => {
 
   it('handles successful comparison', async () => {
     const user = userEvent.setup()
-    const { toast } = require('@/hooks/use-toast')
+    const { toast } = jest.requireMock('@/hooks/use-toast')
 
     // Mock initial data
     mockFetch.mockResolvedValueOnce({
@@ -164,7 +164,7 @@ describe('Comparison Page', () => {
       fireEvent.change(fileInput)
 
       await waitFor(() => {
-        expect(screen.getByText('✓ Wybrano: previous-month.xlsx')).toBeInTheDocument()
+        expect(screen.getByText('Wybrano: previous-month.xlsx')).toBeInTheDocument()
       })
 
       // Click compare button
@@ -189,7 +189,7 @@ describe('Comparison Page', () => {
 
   it('shows error when trying to compare without previous month file', async () => {
     const user = userEvent.setup()
-    const { toast } = require('@/hooks/use-toast')
+    const { toast } = jest.requireMock('@/hooks/use-toast')
 
     render(<ComparisonPage />)
 
@@ -254,11 +254,11 @@ describe('Comparison Page', () => {
     render(<ComparisonPage />)
     
     // The component should render properly without comparison data
-    expect(screen.getByText('🔄 Porównanie Miesięczne Inwentarza')).toBeInTheDocument()
+    expect(screen.getByText('Porównanie Miesięczne Inwentarza')).toBeInTheDocument()
   })
 
   it('handles API errors gracefully', async () => {
-    const { toast } = require('@/hooks/use-toast')
+    const { toast } = jest.requireMock('@/hooks/use-toast')
     
     // Mock API error
     mockFetch.mockRejectedValueOnce(new Error('API Error'))
@@ -267,7 +267,7 @@ describe('Comparison Page', () => {
 
     // The component should still render, and errors should be handled
     await waitFor(() => {
-      expect(screen.getByText('🔄 Porównanie Miesięczne Inwentarza')).toBeInTheDocument()
+      expect(screen.getByText('Porównanie Miesięczne Inwentarza')).toBeInTheDocument()
     })
   })
 })
