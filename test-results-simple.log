@@ -1,0 +1,31 @@
+
+> nextjs_tailwind_shadcn_ts@0.1.0 test
+> jest __tests__/simple.test.ts --verbose
+
+● Validation Warning:
+
+  Unknown option "moduleNameMapping" with value {"^@/(.*)$": "<rootDir>/src/$1"} was found.
+  This is probably a typing mistake. Fixing it will remove this message.
+
+  Configuration Documentation:
+  https://jestjs.io/docs/configuration
+
+● Validation Warning:
+
+  Unknown option "moduleNameMapping" with value {"^@/(.*)$": "<rootDir>/src/$1"} was found.
+  This is probably a typing mistake. Fixing it will remove this message.
+
+  Configuration Documentation:
+  https://jestjs.io/docs/configuration
+
+PASS __tests__/simple.test.ts
+  Simple Tests
+    ✓ should pass basic arithmetic test (3 ms)
+    ✓ should handle string operations (1 ms)
+    ✓ should work with async operations (1 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       3 passed, 3 total
+Snapshots:   0 total
+Time:        0.381 s, estimated 1 s
+Ran all test suites matching __tests__/simple.test.ts.

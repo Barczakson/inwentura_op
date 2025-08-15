@@ -31,32 +31,22 @@ export async function POST(request: NextRequest) {
     for (let i = 1; i < jsonData.length; i++) {
       const row = jsonData[i] as any[]
       
-      // Try to identify columns dynamically
-      let itemId: string | undefined
-      let name: string = ''
-      let quantity: number = 0
-      let unit: string = ''
-
-      // Assume columns are in order: ID (optional), Name, Quantity, Unit
-      // Adjust based on your Excel format
-      if (row.length >= 3) {
-        // If first column looks like an ID (numeric or string)
-        if (typeof row[0] === 'number' || (typeof row[0] === 'string' && row[0].trim())) {
-          itemId = String(row[0])
-          name = String(row[1] || '')
-          quantity = parseFloat(String(row[2] || 0))
-          unit = String(row[3] || '').toLowerCase()
-        } else {
-          // No ID column
-          name = String(row[0] || '')
-          quantity = parseFloat(String(row[1] || 0))
-          unit = String(row[2] || '').toLowerCase()
-        }
+      // Skip empty rows or section headers (like "DODANE DO SPISU", "PÓŁPRODUKTY", etc.)
+      if (!row || row.length < 5 || !row[0] || typeof row[0] !== 'number') {
+        continue
       }
+      
+      // Your Excel format: L.p. | Nr indeksu | Nazwa towaru | Ilość | JMZ
+      // Columns: 0=L.p., 1=Nr indeksu, 2=Nazwa towaru, 3=Ilość, 4=JMZ
+      let itemId: string | undefined = String(row[1] || '') // Nr indeksu
+      let name: string = String(row[2] || '') // Nazwa towaru  
+      let quantity: number = parseFloat(String(row[3] || 0)) // Ilość
+      let unit: string = String(row[4] || '').toLowerCase() // JMZ
 
       // Clean up the data
       name = name.trim()
       unit = unit.trim()
+
 
       if (name && !isNaN(quantity) && unit) {
         const rowId = uuidv4()
@@ -126,24 +116,57 @@ export async function POST(request: NextRequest) {
       })
 
       for (const item of aggregatedWithSourceFiles) {
-        await db.aggregatedItem.upsert({
+        // Check if item already exists to handle sourceFiles correctly
+        const existingItem = await db.aggregatedItem.findUnique({
           where: {
             itemId_name_unit: {
               itemId: item.itemId || null,
               name: item.name,
               unit: item.unit
             }
-          },
-          update: {
-            quantity: {
-              increment: item.quantity
-            }
-          },
-          create: {
-            ...item,
-            fileId: excelFile.id
           }
         })
+
+        if (existingItem) {
+          // Parse existing sourceFiles and add new file
+          let existingSourceFiles: string[] = []
+          try {
+            existingSourceFiles = existingItem.sourceFiles ? JSON.parse(existingItem.sourceFiles) : []
+          } catch (error) {
+            console.warn('Failed to parse existing sourceFiles:', error)
+            existingSourceFiles = []
+          }
+          
+          // Add new file to source files if not already present
+          if (!existingSourceFiles.includes(fileId)) {
+            existingSourceFiles.push(fileId)
+          }
+
+          await db.aggregatedItem.update({
+            where: {
+              itemId_name_unit: {
+                itemId: item.itemId || null,
+                name: item.name,
+                unit: item.unit
+              }
+            },
+            data: {
+              quantity: {
+                increment: item.quantity
+              },
+              sourceFiles: JSON.stringify(existingSourceFiles),
+              count: existingItem.count ? existingItem.count + item.count : item.count
+            }
+          })
+        } else {
+          // Create new item
+          await db.aggregatedItem.create({
+            data: {
+              ...item,
+              fileId: excelFile.id
+            }
+          })
+        }
       }
     } else {
       // If no rows, still return empty aggregated data

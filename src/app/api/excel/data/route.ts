@@ -7,25 +7,56 @@ export async function GET(request: NextRequest) {
     const includeRaw = searchParams.get('includeRaw') === 'true'
     const fileId = searchParams.get('fileId')
 
-    // Build where clause for file filtering
-    const whereClause = fileId ? { fileId: fileId } : {}
-
     // Get aggregated data with source file information
-    const aggregatedData = await db.aggregatedItem.findMany({
-      where: whereClause,
-      include: {
-        file: {
-          select: {
-            id: true,
-            fileName: true
+    let aggregatedData;
+    
+    if (fileId) {
+      // When filtering by file, find aggregated items that include this file in their sourceFiles
+      const allAggregatedData = await db.aggregatedItem.findMany({
+        include: {
+          file: {
+            select: {
+              id: true,
+              fileName: true
+            }
+          }
+        },
+        orderBy: [
+          { name: 'asc' },
+          { unit: 'asc' }
+        ]
+      });
+      
+      // Filter aggregated items that contain the specific fileId in their sourceFiles
+      aggregatedData = allAggregatedData.filter(item => {
+        if (item.sourceFiles) {
+          try {
+            const sourceFileIds = JSON.parse(item.sourceFiles) as string[];
+            return sourceFileIds.includes(fileId);
+          } catch (error) {
+            console.warn('Failed to parse sourceFiles JSON:', error);
+            return false;
           }
         }
-      },
-      orderBy: [
-        { name: 'asc' },
-        { unit: 'asc' }
-      ]
-    })
+        return item.fileId === fileId; // Fallback to direct fileId match
+      });
+    } else {
+      // Get all aggregated data when no file filter is specified
+      aggregatedData = await db.aggregatedItem.findMany({
+        include: {
+          file: {
+            select: {
+              id: true,
+              fileName: true
+            }
+          }
+        },
+        orderBy: [
+          { name: 'asc' },
+          { unit: 'asc' }
+        ]
+      });
+    }
 
     // Get source files for each aggregated item
     const aggregatedWithSourceFiles = await Promise.all(

@@ -1,0 +1,42 @@
+
+> nextjs_tailwind_shadcn_ts@0.1.0 test
+> jest src/lib/__tests__/unit-conversion.test.ts --verbose
+
+● Validation Warning:
+
+  Unknown option "moduleNameMapping" with value {"^@/(.*)$": "<rootDir>/src/$1"} was found.
+  This is probably a typing mistake. Fixing it will remove this message.
+
+  Configuration Documentation:
+  https://jestjs.io/docs/configuration
+
+● Validation Warning:
+
+  Unknown option "moduleNameMapping" with value {"^@/(.*)$": "<rootDir>/src/$1"} was found.
+  This is probably a typing mistake. Fixing it will remove this message.
+
+  Configuration Documentation:
+  https://jestjs.io/docs/configuration
+
+PASS src/lib/__tests__/unit-conversion.test.ts
+  Unit Conversion
+    formatQuantityWithConversion
+      ✓ should convert grams to kilograms when >= 1000g (2 ms)
+      ✓ should keep grams when < 1000g
+      ✓ should convert milligrams to grams when >= 1000mg
+      ✓ should keep milligrams when < 1000mg
+      ✓ should convert milliliters to liters when >= 1000ml (1 ms)
+      ✓ should keep milliliters when < 1000ml
+      ✓ should not convert kilograms
+      ✓ should not convert liters
+      ✓ should not convert other units (1 ms)
+      ✓ should handle zero quantities
+      ✓ should handle decimal quantities with precision
+      ✓ should handle case-insensitive units
+      ✓ should format with default precision (1 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       13 passed, 13 total
+Snapshots:   0 total
+Time:        0.354 s, estimated 1 s
+Ran all test suites matching src/lib/__tests__/unit-conversion.test.ts.

@@ -5,13 +5,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Upload, FileSpreadsheet, Plus, Edit, Trash2, Download } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Upload, FileSpreadsheet, Plus, Edit, Trash2, Download, BarChart } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { DataTable } from '@/components/data-table'
 import { EditItemDialog } from '@/components/edit-item-dialog'
-import { DataCharts } from '@/components/data-charts'
 import { formatQuantityWithConversion } from '@/lib/unit-conversion'
 import { toast } from '@/hooks/use-toast'
+import Link from 'next/link'
 
 interface ExcelRow {
   id: string
@@ -48,6 +64,13 @@ export default function Home() {
   const [editingItem, setEditingItem] = useState<AggregatedItem | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+  const [isMounted, setIsMounted] = useState(false)
+  const [currentView, setCurrentView] = useState<'general' | 'file'>('general')
+  const [currentFileName, setCurrentFileName] = useState<string>('')
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
+  const [bulkEditMode, setBulkEditMode] = useState(false)
+  const [inlineEditingItem, setInlineEditingItem] = useState<string | null>(null)
+  const [inlineEditValue, setInlineEditValue] = useState<string>('')
   
   // Manual entry form state
   const [manualEntry, setManualEntry] = useState({
@@ -57,33 +80,28 @@ export default function Home() {
     unit: ''
   })
 
-  // Load initial data
-  console.log('About to define useEffect')
+  // Handle client-side mounting
   useEffect(() => {
-    console.log('Component mounted/updated, loading initial data...')
-    try {
-      loadData()
-      loadUploadedFiles()
-    } catch (error) {
-      console.error('Error in useEffect:', error)
-    }
-  }) // Remove dependency array to run on every render
-  console.log('useEffect defined')
+    setIsMounted(true)
+  }, [])
+
+  // Load initial data only after component is mounted on client
+  useEffect(() => {
+    if (!isMounted) return
+    
+    loadData()
+    loadUploadedFiles()
+  }, [isMounted])
+
 
   const loadUploadedFiles = async () => {
     try {
-      console.log('Loading uploaded files...')
       const response = await fetch('/api/excel/files')
-      console.log('Files response status:', response.status)
       if (response.ok) {
         const files = await response.json()
-        console.log('Loaded files:', files)
-        console.log('Files length:', files?.length)
         setUploadedFiles(files)
       } else {
         console.error('Failed to load uploaded files:', response.status)
-        const errorText = await response.text()
-        console.error('Error response:', errorText)
       }
     } catch (error) {
       console.error('Error loading uploaded files:', error)
@@ -92,20 +110,20 @@ export default function Home() {
 
   const loadData = async () => {
     try {
-      console.log('Loading data...')
+      console.log('🔄 loadData: Fetching from API...')
       const response = await fetch('/api/excel/data?includeRaw=true')
-      console.log('Data response status:', response.status)
       if (response.ok) {
         const data = await response.json()
-        console.log('Loaded data:', data)
-        console.log('Aggregated data length:', data.aggregated?.length)
-        console.log('Raw data length:', data.raw?.length)
+        console.log('📊 loadData: Received data:', {
+          aggregatedCount: data.aggregated?.length || 0,
+          rawCount: data.raw?.length || 0,
+          firstAggregated: data.aggregated?.[0]?.name || 'none'
+        })
         setAggregatedData(data.aggregated || [])
         setExcelData(data.raw || [])
+        console.log('✅ loadData: State updated')
       } else {
         console.error('Failed to load data:', response.status)
-        const errorText = await response.text()
-        console.error('Error response:', errorText)
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -142,9 +160,6 @@ export default function Home() {
 
       if (response.ok) {
         const data = await response.json()
-        console.log('Upload response:', data)
-        setExcelData(data.rows || [])
-        setAggregatedData(data.aggregated || [])
         
         // Add to uploaded files list
         const newUploadedFile: UploadedFile = {
@@ -156,9 +171,13 @@ export default function Home() {
         }
         setUploadedFiles(prev => [newUploadedFile, ...prev])
         
+        // Reload all data from API to get the latest aggregated results
+        await loadData()
+        await loadUploadedFiles()
+        
         toast({
-          title: "Success",
-          description: `File "${file.name}" uploaded and processed successfully.`,
+          title: "Sukces",
+          description: `Plik "${file.name}" został przesłany i przetworzony pomyślnie.`,
         })
       } else {
         const error = await response.json()
@@ -376,12 +395,17 @@ export default function Home() {
       const response = await fetch(`/api/excel/data?fileId=${fileId}&includeRaw=true`)
       if (response.ok) {
         const data = await response.json()
-        console.log('File data loaded:', data)
         setExcelData(data.raw || [])
         setAggregatedData(data.aggregated || [])
+        
+        // Find the file name
+        const file = uploadedFiles.find(f => f.id === fileId)
+        setCurrentFileName(file?.name || 'Nieznany plik')
+        setCurrentView('file')
+        
         toast({
-          title: "Success",
-          description: "Loaded data from selected file.",
+          title: "Sukces",
+          description: "Załadowano dane z wybranego pliku.",
         })
       } else {
         console.error('Failed to load file data:', response.status)
@@ -389,12 +413,141 @@ export default function Home() {
     } catch (error) {
       console.error('Error loading file data:', error)
       toast({
-        title: "Error",
-        description: "Failed to load file data",
+        title: "Błąd",
+        description: "Nie udało się załadować danych z pliku",
         variant: "destructive",
       })
     }
   }
+
+  const handleReturnToGeneralView = async () => {
+    setCurrentView('general')
+    setCurrentFileName('')
+    setSelectedItems(new Set())
+    setBulkEditMode(false)
+    await loadData()
+    await loadUploadedFiles()
+    toast({
+      title: "Powrót",
+      description: "Przywrócono widok ogólny ze wszystkimi plikami.",
+    })
+  }
+
+  const handleToggleBulkEdit = () => {
+    setBulkEditMode(!bulkEditMode)
+    setSelectedItems(new Set())
+  }
+
+  const handleSelectItem = (itemId: string) => {
+    const newSelected = new Set(selectedItems)
+    if (newSelected.has(itemId)) {
+      newSelected.delete(itemId)
+    } else {
+      newSelected.add(itemId)
+    }
+    setSelectedItems(newSelected)
+  }
+
+  const handleSelectAll = () => {
+    if (selectedItems.size === aggregatedData.length) {
+      setSelectedItems(new Set())
+    } else {
+      setSelectedItems(new Set(aggregatedData.map(item => item.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedItems.size === 0) return
+    
+    try {
+      const promises = Array.from(selectedItems).map(id => 
+        fetch(`/api/excel/data?id=${id}`, { method: 'DELETE' })
+      )
+      
+      await Promise.all(promises)
+      setAggregatedData(prev => prev.filter(item => !selectedItems.has(item.id)))
+      setSelectedItems(new Set())
+      setBulkEditMode(false)
+      
+      toast({
+        title: "Sukces",
+        description: `Usunięto ${selectedItems.size} pozycji.`,
+      })
+    } catch (error) {
+      console.error('Error during bulk delete:', error)
+      toast({
+        title: "Błąd",
+        description: "Nie udało się usunąć wybranych pozycji",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleStartInlineEdit = (itemId: string, currentQuantity: number) => {
+    setInlineEditingItem(itemId)
+    setInlineEditValue(currentQuantity.toString())
+  }
+
+  const handleCancelInlineEdit = () => {
+    setInlineEditingItem(null)
+    setInlineEditValue('')
+  }
+
+  const handleSaveInlineEdit = async (itemId: string) => {
+    const newQuantity = parseFloat(inlineEditValue)
+    if (isNaN(newQuantity) || newQuantity <= 0) {
+      toast({
+        title: "Błąd",
+        description: "Wprowadź prawidłową ilość",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const response = await fetch('/api/excel/data', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: itemId,
+          quantity: newQuantity
+        })
+      })
+
+      if (response.ok) {
+        setAggregatedData(prev => 
+          prev.map(item => 
+            item.id === itemId 
+              ? { ...item, quantity: newQuantity }
+              : item
+          )
+        )
+        setInlineEditingItem(null)
+        setInlineEditValue('')
+        toast({
+          title: "Sukces",
+          description: "Ilość została zaktualizowana.",
+        })
+      } else {
+        const error = await response.json()
+        toast({
+          title: "Błąd",
+          description: error.error || "Nie udało się zaktualizować ilości",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Error updating quantity:', error)
+      toast({
+        title: "Błąd",
+        description: "Nie udało się zaktualizować ilości",
+        variant: "destructive",
+      })
+    }
+  }
+
 
   const handleDeleteFile = async (fileId: string) => {
     try {
@@ -430,14 +583,6 @@ export default function Home() {
     }
   }
 
-  // Add state logging to debug data issues
-  useEffect(() => {
-    console.log('Current state:', {
-      excelData: excelData,
-      aggregatedData: aggregatedData,
-      uploadedFiles: uploadedFiles
-    })
-  }, [excelData, aggregatedData, uploadedFiles])
 
   const formatQuantity = (quantity: number, unit: string) => {
     return formatQuantityWithConversion(quantity, unit)
@@ -447,29 +592,29 @@ export default function Home() {
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold">Excel Data Manager</h1>
+          <h1 className="text-3xl font-bold">Manager Inwentury Excel</h1>
           <p className="text-muted-foreground">
-            Upload Excel files to manage and aggregate your data automatically
+            {currentView === 'file' 
+              ? `Widok pliku: ${currentFileName}`
+              : 'Prześlij pliki Excel, aby zarządzać i agregować dane automatycznie'
+            }
           </p>
-          <div className="flex justify-center gap-4 text-sm">
-            <span>Aggregated: {aggregatedData.length}</span>
-            <span>Raw: {excelData.length}</span>
-            <span>Files: {uploadedFiles.length}</span>
+          <div className="flex justify-center gap-4 text-sm text-muted-foreground">
+            <span>Zagregowane: {isMounted ? aggregatedData.length : '...'}</span>
+            <span>Surowe: {isMounted ? excelData.length : '...'}</span>
+            <span>Pliki: {isMounted ? uploadedFiles.length : '...'}</span>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Debug: Component rendered at {new Date().toLocaleTimeString()}
-          </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => {
-              console.log('Refresh button clicked')
-              loadData()
-              loadUploadedFiles()
-            }}
-          >
-            Refresh Data
-          </Button>
+          {currentView === 'file' && (
+            <div className="mt-4">
+              <Button
+                onClick={handleReturnToGeneralView}
+                variant="outline"
+                className="mx-auto"
+              >
+                ← Powrót do widoku ogólnego
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* File Upload Section */}
@@ -477,10 +622,10 @@ export default function Home() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5" />
-              Upload Excel File
+              Prześlij Plik Excel
             </CardTitle>
             <CardDescription>
-              Drag and drop your Excel file here or click to browse
+              Przeciągnij i upuść plik Excel tutaj lub kliknij, aby przeglądać
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -493,12 +638,12 @@ export default function Home() {
               <input {...getInputProps()} />
               <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
               {isDragActive ? (
-                <p>Drop the Excel file here...</p>
+                <p>Upuść plik Excel tutaj...</p>
               ) : (
                 <div className="space-y-2">
-                  <p>Drag and drop an Excel file here, or click to select</p>
+                  <p>Przeciągnij i upuść plik Excel tutaj, lub kliknij aby wybrać</p>
                   <p className="text-sm text-muted-foreground">
-                    Supports .xlsx and .xls files
+                    Obsługuje pliki .xlsx i .xls
                   </p>
                 </div>
               )}
@@ -520,10 +665,13 @@ export default function Home() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5" />
-                Uploaded Files ({uploadedFiles.length})
+                Przesłane Pliki ({uploadedFiles.length})
               </CardTitle>
               <CardDescription>
-                Click on a file to view its data
+                {currentView === 'general' 
+                  ? 'Kliknij na plik, aby wyświetlić jego dane'
+                  : 'Lista wszystkich przesłanych plików'
+                }
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -553,7 +701,7 @@ export default function Home() {
                           handleViewFileData(uploadedFile.id)
                         }}
                       >
-                        View
+                        Podgląd
                       </Button>
                       <Button
                         variant="ghost"
@@ -574,54 +722,108 @@ export default function Home() {
           </Card>
         )}
 
-        {/* Data Display Section */}
-        {(excelData.length > 0 || aggregatedData.length > 0 || uploadedFiles.length > 0) && (
-          <Tabs defaultValue="aggregated" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="aggregated">
-                Aggregated Data ({aggregatedData.length})
-              </TabsTrigger>
-              <TabsTrigger value="raw">
-                Raw Data ({excelData.length})
-              </TabsTrigger>
-              <TabsTrigger value="charts">
-                Charts ({aggregatedData.length})
-              </TabsTrigger>
-            </TabsList>
+        {/* Navigation to Comparison Page */}
+        <div className="flex justify-center mb-4 sm:mb-6">
+          <Link href="/comparison">
+            <Button variant="outline" className="gap-2">
+              <BarChart className="w-4 h-4" />
+              🔄 Porównanie Miesięczne
+            </Button>
+          </Link>
+        </div>
+
+        <div>
+            {/* Data Display Section */}
+            {(excelData.length > 0 || aggregatedData.length > 0 || uploadedFiles.length > 0) && (
+              <div className="space-y-4">
+                {currentView === 'file' && (
+                  <Card className="border-primary/50 bg-primary/5">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold">Podgląd pliku: {currentFileName}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Wyświetlane są tylko dane z wybranego pliku
+                          </p>
+                        </div>
+                        <Button
+                          onClick={handleReturnToGeneralView}
+                          variant="outline"
+                          className="gap-2"
+                        >
+                          ← Powrót do podsumowania wszystkich plików
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                
+                <Tabs defaultValue="aggregated" className="space-y-4">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="aggregated">
+                      Dane Zagregowane ({aggregatedData.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="raw">
+                      Dane Surowe ({excelData.length})
+                    </TabsTrigger>
+                  </TabsList>
 
             <TabsContent value="aggregated">
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Aggregated Data</CardTitle>
+                      <CardTitle>Dane Zagregowane</CardTitle>
                       <CardDescription>
-                        Items with the same name and ID have been automatically summed
+                        Pozycje o tej samej nazwie i ID zostały automatycznie zsumowane
+                        {bulkEditMode && selectedItems.size > 0 && (
+                          <span className="ml-2 text-primary">
+                            • Wybrano: {selectedItems.size} pozycji
+                          </span>
+                        )}
                       </CardDescription>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleExportData('aggregated')}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Export
-                    </Button>
+                    <div className="flex gap-2">
+                      {aggregatedData.length > 0 && (
+                        <Button
+                          variant={bulkEditMode ? "default" : "outline"}
+                          size="sm"
+                          onClick={handleToggleBulkEdit}
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          {bulkEditMode ? "Zakończ edycję" : "Edycja masowa"}
+                        </Button>
+                      )}
+                      {bulkEditMode && selectedItems.size > 0 && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleBulkDelete}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Usuń wybrane ({selectedItems.size})
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleExportData('aggregated')}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Eksportuj
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   {aggregatedData.length === 0 ? (
                     <div className="text-center py-8">
-                      <p className="text-muted-foreground">No aggregated data available. Upload an Excel file to get started.</p>
+                      <p className="text-muted-foreground">Brak zagregowanych danych. Prześlij plik Excel, aby rozpocząć.</p>
                     </div>
                   ) : (
-                    <DataTable
-                      data={aggregatedData}
-                      onEdit={handleEditItemById}
-                      onDelete={handleDeleteItem}
-                      showAggregated={true}
-                      uploadedFiles={uploadedFiles}
-                    />
+                    <div className="p-4 bg-muted rounded">
+                      <p>DataTable placeholder - {aggregatedData.length} items</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -632,9 +834,9 @@ export default function Home() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Raw Data</CardTitle>
+                      <CardTitle>Dane Surowe</CardTitle>
                       <CardDescription>
-                        Individual rows from your Excel file
+                        Pojedyncze wiersze z Twojego pliku Excel
                       </CardDescription>
                     </div>
                     <Button
@@ -643,85 +845,82 @@ export default function Home() {
                       onClick={() => handleExportData('raw')}
                     >
                       <Download className="w-4 h-4 mr-2" />
-                      Export
+                      Eksportuj
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
                   {excelData.length === 0 ? (
                     <div className="text-center py-8">
-                      <p className="text-muted-foreground">No raw data available. Upload an Excel file to get started.</p>
+                      <p className="text-muted-foreground">Brak surowych danych. Prześlij plik Excel, aby rozpocząć.</p>
                     </div>
                   ) : (
-                    <DataTable
-                      data={excelData}
-                      onEdit={handleEditItemById}
-                      onDelete={handleDeleteItem}
-                      showAggregated={false}
-                      uploadedFiles={uploadedFiles}
-                    />
+                    <div className="p-4 bg-muted rounded">
+                      <p>Raw DataTable placeholder - {excelData.length} items</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
             </TabsContent>
 
-            <TabsContent value="charts">
-              <DataCharts data={aggregatedData} />
-            </TabsContent>
-          </Tabs>
+                </Tabs>
+
+                {/* Add Manual Entry */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Plus className="w-5 h-5" />
+                      Dodaj Wpis Ręczny
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <Input
+                        placeholder="Nr indeksu (opcjonalny)"
+                        value={manualEntry.itemId}
+                        onChange={(e) => setManualEntry(prev => ({ ...prev, itemId: e.target.value }))}
+                      />
+                      <Input
+                        placeholder="Nazwa towaru"
+                        value={manualEntry.name}
+                        onChange={(e) => setManualEntry(prev => ({ ...prev, name: e.target.value }))}
+                      />
+                      <Input
+                        placeholder="Ilość"
+                        type="number"
+                        value={manualEntry.quantity}
+                        onChange={(e) => setManualEntry(prev => ({ ...prev, quantity: e.target.value }))}
+                      />
+                      <Input
+                        placeholder="Jednostka (g, kg, l, itd.)"
+                        value={manualEntry.unit}
+                        onChange={(e) => setManualEntry(prev => ({ ...prev, unit: e.target.value }))}
+                      />
+                    </div>
+                    <Button 
+                      className="mt-4 w-full"
+                      onClick={handleManualEntry}
+                    >
+                      Dodaj Wpis
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+        </div>
+
+        {/* Edit Item Dialog - temporarily disabled */}
+        {false && (
+          <EditItemDialog
+            isOpen={isEditDialogOpen}
+            onClose={() => {
+              setIsEditDialogOpen(false)
+              setEditingItem(null)
+            }}
+            item={editingItem}
+            onSave={handleSaveEdit}
+          />
         )}
-
-        {/* Add Manual Entry */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              Add Manual Entry
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Input
-                placeholder="Item ID (optional)"
-                value={manualEntry.itemId}
-                onChange={(e) => setManualEntry(prev => ({ ...prev, itemId: e.target.value }))}
-              />
-              <Input
-                placeholder="Item name"
-                value={manualEntry.name}
-                onChange={(e) => setManualEntry(prev => ({ ...prev, name: e.target.value }))}
-              />
-              <Input
-                placeholder="Quantity"
-                type="number"
-                value={manualEntry.quantity}
-                onChange={(e) => setManualEntry(prev => ({ ...prev, quantity: e.target.value }))}
-              />
-              <Input
-                placeholder="Unit (g, kg, etc.)"
-                value={manualEntry.unit}
-                onChange={(e) => setManualEntry(prev => ({ ...prev, unit: e.target.value }))}
-              />
-            </div>
-            <Button 
-              className="mt-4 w-full"
-              onClick={handleManualEntry}
-            >
-              Add Entry
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Edit Item Dialog */}
-        <EditItemDialog
-          isOpen={isEditDialogOpen}
-          onClose={() => {
-            setIsEditDialogOpen(false)
-            setEditingItem(null)
-          }}
-          item={editingItem}
-          onSave={handleSaveEdit}
-        />
       </div>
     </div>
   )

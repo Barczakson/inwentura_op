@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Edit, Trash2, ArrowUpDown, Search } from 'lucide-react'
+import { Edit, Trash2, ArrowUpDown, Search, CheckSquare, Square } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import { formatQuantityWithConversion } from '@/lib/unit-conversion'
 
@@ -40,10 +40,35 @@ interface DataTableProps {
     id: string
     name: string
   }>
+  bulkEditMode?: boolean
+  selectedItems?: Set<string>
+  onSelectItem?: (id: string) => void
+  onSelectAll?: () => void
+  inlineEditingItem?: string | null
+  inlineEditValue?: string
+  onStartInlineEdit?: (itemId: string, currentQuantity: number) => void
+  onCancelInlineEdit?: () => void
+  onSaveInlineEdit?: (itemId: string) => void
+  onInlineEditValueChange?: (value: string) => void
 }
 
-export function DataTable({ data, onEdit, onDelete, showAggregated = false, uploadedFiles = [] }: DataTableProps) {
-  console.log('DataTable received:', { data, showAggregated, uploadedFiles })
+export function DataTable({ 
+  data, 
+  onEdit, 
+  onDelete, 
+  showAggregated = false, 
+  uploadedFiles = [],
+  bulkEditMode = false,
+  selectedItems = new Set(),
+  onSelectItem,
+  onSelectAll,
+  inlineEditingItem = null,
+  inlineEditValue = '',
+  onStartInlineEdit,
+  onCancelInlineEdit,
+  onSaveInlineEdit,
+  onInlineEditValueChange
+}: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [sortColumn, setSortColumn] = useState<'name' | 'quantity' | 'unit'>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
@@ -174,113 +199,193 @@ export function DataTable({ data, onEdit, onDelete, showAggregated = false, uplo
         </Select>
       </div>
 
-      {/* Table */}
-      <div className="rounded-md border">
-        <Table>
+      {/* Table - Mobile First Responsive */}
+      <div className="rounded-md border overflow-x-auto">
+        <Table className="min-w-full">
           <TableHeader>
             <TableRow>
+              {bulkEditMode && (
+                <TableHead className="w-[50px]">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onSelectAll}
+                    className="p-0 h-6 w-6"
+                  >
+                    {selectedItems.size === filteredAndSortedData.length && filteredAndSortedData.length > 0 ? (
+                      <CheckSquare className="w-4 h-4" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </Button>
+                </TableHead>
+              )}
               <TableHead 
-                className="cursor-pointer hover:bg-muted/50"
+                className="cursor-pointer hover:bg-muted/50 min-w-[120px]"
                 onClick={() => handleSort('name')}
               >
                 <div className="flex items-center gap-2">
-                  Name
-                  <ArrowUpDown className="w-4 h-4" />
+                  <span className="truncate">Name</span>
+                  <ArrowUpDown className="w-4 h-4 flex-shrink-0" />
                 </div>
               </TableHead>
               {!showAggregated && (
                 <TableHead 
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="cursor-pointer hover:bg-muted/50 hidden sm:table-cell min-w-[80px]"
                   onClick={() => handleSort('name')}
                 >
                   <div className="flex items-center gap-2">
-                    ID
-                    <ArrowUpDown className="w-4 h-4" />
+                    <span className="truncate">ID</span>
+                    <ArrowUpDown className="w-4 h-4 flex-shrink-0" />
                   </div>
                 </TableHead>
               )}
               {showAggregated && (
-                <TableHead>Source Files</TableHead>
+                <TableHead className="hidden lg:table-cell min-w-[150px]">Source Files</TableHead>
               )}
               <TableHead 
-                className="cursor-pointer hover:bg-muted/50"
+                className="cursor-pointer hover:bg-muted/50 min-w-[100px]"
                 onClick={() => handleSort('quantity')}
               >
                 <div className="flex items-center gap-2">
-                  Quantity
-                  <ArrowUpDown className="w-4 h-4" />
+                  <span className="truncate">Quantity</span>
+                  <ArrowUpDown className="w-4 h-4 flex-shrink-0" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-muted/50"
+                className="cursor-pointer hover:bg-muted/50 hidden md:table-cell min-w-[70px]"
                 onClick={() => handleSort('unit')}
               >
                 <div className="flex items-center gap-2">
-                  Unit
-                  <ArrowUpDown className="w-4 h-4" />
+                  <span className="truncate">Unit</span>
+                  <ArrowUpDown className="w-4 h-4 flex-shrink-0" />
                 </div>
               </TableHead>
               {showAggregated && (
-                <TableHead>Count</TableHead>
+                <TableHead className="hidden sm:table-cell min-w-[70px]">Count</TableHead>
               )}
-              <TableHead className="w-[100px]">Actions</TableHead>
+              <TableHead className="w-[80px] min-w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredAndSortedData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={showAggregated ? 6 : 6} className="text-center py-8">
+                <TableCell colSpan={bulkEditMode ? (showAggregated ? 7 : 7) : (showAggregated ? 6 : 6)} className="text-center py-8">
                   No data found
                 </TableCell>
               </TableRow>
             ) : (
               filteredAndSortedData.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  {!showAggregated && (
+                  {bulkEditMode && (
                     <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onSelectItem?.(item.id)}
+                        className="p-0 h-6 w-6"
+                      >
+                        {selectedItems.has(item.id) ? (
+                          <CheckSquare className="w-4 h-4 text-primary" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </TableCell>
+                  )}
+                  <TableCell className="font-medium min-w-[120px]">
+                    <div className="truncate pr-2">{item.name}</div>
+                    {/* Show unit on mobile when Unit column is hidden */}
+                    <div className="md:hidden">
+                      <Badge variant="outline" className="text-xs mt-1">{item.unit}</Badge>
+                    </div>
+                  </TableCell>
+                  {!showAggregated && (
+                    <TableCell className="hidden sm:table-cell">
                       {item.itemId ? (
-                        <Badge variant="secondary">{item.itemId}</Badge>
+                        <Badge variant="secondary" className="text-xs">{item.itemId}</Badge>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
                   )}
                   {showAggregated && (
-                    <TableCell>
-                      <div className="max-w-[200px]">
+                    <TableCell className="hidden lg:table-cell">
+                      <div className="max-w-[150px]">
                         {item.sourceFiles && item.sourceFiles.length > 0 ? (
                           <div className="space-y-1">
-                            {item.sourceFiles.slice(0, 2).map((fileId) => (
-                              <Badge key={`file-${fileId}`} variant="outline" className="text-xs">
-                                {getFileName(fileId)}
+                            {item.sourceFiles.slice(0, 1).map((fileId, index) => (
+                              <Badge key={`${item.id}-file-${fileId}-${index}`} variant="outline" className="text-xs block">
+                                <span className="truncate">{getFileName(fileId)}</span>
                               </Badge>
                             ))}
-                            {item.sourceFiles.length > 2 && (
-                              <Badge key="more-files" variant="secondary" className="text-xs">
-                                +{item.sourceFiles.length - 2} more
+                            {item.sourceFiles.length > 1 && (
+                              <Badge key={`${item.id}-more-files`} variant="secondary" className="text-xs">
+                                +{item.sourceFiles.length - 1} more
                               </Badge>
                             )}
                           </div>
                         ) : item.fileId ? (
                           <Badge variant="outline" className="text-xs">
-                            {getFileName(item.fileId)}
+                            <span className="truncate">{getFileName(item.fileId)}</span>
                           </Badge>
                         ) : (
-                          <span className="text-muted-foreground text-xs">Manual entry</span>
+                          <span className="text-muted-foreground text-xs">Manual</span>
                         )}
                       </div>
                     </TableCell>
                   )}
-                  <TableCell className="font-mono">
-                    {formatQuantityWithConversion(item.quantity, item.unit)}
+                  <TableCell className="font-mono min-w-[100px]">
+                    {inlineEditingItem === item.id ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          value={inlineEditValue}
+                          onChange={(e) => onInlineEditValueChange?.(e.target.value)}
+                          className="w-16 h-8 text-xs"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              onSaveInlineEdit?.(item.id)
+                            } else if (e.key === 'Escape') {
+                              onCancelInlineEdit?.()
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => onSaveInlineEdit?.(item.id)}
+                          className="h-6 px-1 text-xs"
+                        >
+                          ✓
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={onCancelInlineEdit}
+                          className="h-6 px-1 text-xs"
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                    ) : (
+                      <div
+                        className="cursor-pointer hover:bg-muted/50 p-1 rounded text-sm"
+                        onClick={() => onStartInlineEdit?.(item.id, item.quantity)}
+                        title="Kliknij, aby edytować ilość"
+                      >
+                        <div className="truncate">
+                          {formatQuantityWithConversion(item.quantity, item.unit)}
+                        </div>
+                      </div>
+                    )}
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{item.unit}</Badge>
+                  <TableCell className="hidden md:table-cell">
+                    <Badge variant="outline" className="text-xs">{item.unit}</Badge>
                   </TableCell>
                   {showAggregated && (
-                    <TableCell>
-                      <Badge variant="secondary">
+                    <TableCell className="hidden sm:table-cell">
+                      <Badge variant="secondary" className="text-xs">
                         {item.count || data.filter(d => d.name === item.name && d.unit === item.unit).length}
                       </Badge>
                     </TableCell>
