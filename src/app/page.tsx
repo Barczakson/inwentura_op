@@ -21,10 +21,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Upload, FileSpreadsheet, Plus, Edit, Trash2, Download, BarChart } from 'lucide-react'
+import { Upload, FileSpreadsheet, Plus, Edit, Trash2, Download, BarChart, X } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { DataTable } from '@/components/data-table'
 import { EditItemDialog } from '@/components/edit-item-dialog'
+import { ColumnMapping } from '@/components/column-mapping'
 import { formatQuantityWithConversion } from '@/lib/unit-conversion'
 import { getFileColorClass, getFileBorderColor, getFileBackgroundColor } from '@/lib/colors'
 import { toast } from '@/hooks/use-toast'
@@ -44,10 +45,14 @@ interface AggregatedItem {
   name: string
   quantity: number
   unit: string
+  category?: string
   fileId?: string
   sourceFiles?: string[]
   count?: number
   isAggregated?: boolean // Flag to indicate if item is aggregated
+  isDuplicate?: boolean
+  duplicateCount?: number
+  originalIndex?: number
 }
 
 interface UploadedFile {
@@ -73,6 +78,16 @@ export default function Home() {
   const [bulkEditMode, setBulkEditMode] = useState(false)
   const [inlineEditingItem, setInlineEditingItem] = useState<string | null>(null)
   const [inlineEditValue, setInlineEditValue] = useState<string>('')
+  
+  // Column mapping state
+  const [showColumnMapping, setShowColumnMapping] = useState(false)
+  const [columnMapping, setColumnMapping] = useState<{ 
+    itemIdColumn?: number, 
+    nameColumn: number, 
+    quantityColumn: number, 
+    unitColumn: number,
+    headerRow: number
+  } | null>(null)
   
   // Manual entry form state
   const [manualEntry, setManualEntry] = useState({
@@ -112,18 +127,20 @@ export default function Home() {
 
   const loadData = async () => {
     try {
-      console.log('loadData: Fetching from API...')
+      console.log('loadData: Fetching from standard data API...')
+      
       const response = await fetch('/api/excel/data?includeRaw=true')
+      
       if (response.ok) {
         const data = await response.json()
+        
         console.log('loadData: Received data:', {
           aggregatedCount: data.aggregated?.length || 0,
-          rawCount: data.raw?.length || 0,
-          firstAggregated: data.aggregated?.[0]?.name || 'none'
+          rawCount: data.raw?.length || 0
         })
         
         // Add isAggregated flag to aggregated data
-        const aggregatedWithData = (data.aggregated || []).map((item: any) => ({
+        const aggregatedWithFlags = (data.aggregated || []).map((item: any) => ({
           ...item,
           isAggregated: (item.sourceFiles && item.sourceFiles.length > 1) || 
                        (item.count && item.count > 1) ||
@@ -131,7 +148,7 @@ export default function Home() {
                         !item.fileId) // If it has sourceFiles but no direct fileId, it's aggregated
         }))
         
-        setAggregatedData(aggregatedWithData)
+        setAggregatedData(aggregatedWithFlags)
         setExcelData(data.raw || [])
         console.log('✅ loadData: State updated')
       } else {
@@ -146,7 +163,8 @@ export default function Home() {
     const file = acceptedFiles[0]
     if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
       setFile(file)
-      handleFileUpload(file)
+      // For better Excel compatibility, show column mapping interface
+      setShowColumnMapping(true)
     }
   }
 
@@ -159,13 +177,26 @@ export default function Home() {
     multiple: false
   })
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (file: File, mapping: { 
+    itemIdColumn?: number, 
+    nameColumn: number, 
+    quantityColumn: number, 
+    unitColumn: number,
+    headerRow: number
+  } | null = null) => {
     setIsUploading(true)
     try {
       const formData = new FormData()
       formData.append('file', file)
+      
+      // Use standard upload endpoint
+      const endpoint = '/api/excel/upload'
+      
+      if (mapping) {
+        formData.append('columnMapping', JSON.stringify(mapping))
+      }
 
-      const response = await fetch('/api/excel/upload', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         body: formData
       })
@@ -292,6 +323,25 @@ export default function Home() {
         variant: "destructive",
       })
     }
+  }
+
+  const handleColumnMappingComplete = (mapping: { 
+    itemIdColumn?: number, 
+    nameColumn: number, 
+    quantityColumn: number, 
+    unitColumn: number,
+    headerRow: number
+  }) => {
+    setColumnMapping(mapping)
+    setShowColumnMapping(false)
+    if (file) {
+      handleFileUpload(file, mapping)
+    }
+  }
+
+  const handleCancelColumnMapping = () => {
+    setShowColumnMapping(false)
+    setFile(null)
   }
 
   const handleManualEntry = async () => {
@@ -626,6 +676,29 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Column Mapping Dialog */}
+        {showColumnMapping && file && (
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-4xl">
+              <div className="flex justify-end mb-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleCancelColumnMapping}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <ColumnMapping 
+                file={file} 
+                onMappingComplete={handleColumnMappingComplete}
+                onCancel={handleCancelColumnMapping}
+              />
+            </div>
+          </div>
+        )}
+
         {/* File Upload Section */}
         <Card>
           <CardHeader>
@@ -657,7 +730,7 @@ export default function Home() {
                 </div>
               )}
             </div>
-            {file && (
+            {file && !showColumnMapping && (
               <div className="mt-4 p-4 bg-muted rounded-lg">
                 <p className="font-medium">{file.name}</p>
                 <p className="text-sm text-muted-foreground">
@@ -799,32 +872,14 @@ export default function Home() {
                     <div className="flex gap-2">
                       {aggregatedData.length > 0 && (
                         <Button
-                          variant={bulkEditMode ? "default" : "outline"}
+                          variant="outline"
                           size="sm"
-                          onClick={handleToggleBulkEdit}
+                          onClick={() => handleExportData('aggregated')}
                         >
-                          <Edit className="w-4 h-4 mr-2" />
-                          {bulkEditMode ? "Zakończ edycję" : "Edycja masowa"}
+                          <Download className="w-4 h-4 mr-2" />
+                          Eksportuj
                         </Button>
                       )}
-                      {bulkEditMode && selectedItems.size > 0 && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={handleBulkDelete}
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Usuń wybrane ({selectedItems.size})
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleExportData('aggregated')}
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        Eksportuj
-                      </Button>
                     </div>
                   </div>
                 </CardHeader>
@@ -841,10 +896,6 @@ export default function Home() {
                       inlineEditingItem={inlineEditingItem}
                       inlineEditValue={inlineEditValue}
                       onInlineEditValueChange={(value) => setInlineEditValue(value)}
-                      bulkEditMode={bulkEditMode}
-                      selectedItems={selectedItems}
-                      onSelectItem={handleSelectItem}
-                      onSelectAll={handleSelectAll}
                       showAggregated={true}
                       uploadedFiles={uploadedFiles}
                       onStartInlineEdit={handleStartInlineEdit}

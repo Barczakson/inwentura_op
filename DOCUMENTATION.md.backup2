@@ -1,19 +1,50 @@
 # Excel Inventory Manager - Complete Documentation
 
-## 📋 Table of Contents
+## 📁 Flexible Excel Upload Feature
+
+The Excel Inventory Manager now supports flexible Excel file uploads with column mapping, allowing users to process Excel files with various structures.
+
+### How It Works
+
+1. When you upload an Excel file, the application analyzes its structure
+2. The column mapping interface appears, showing sample data from each column
+3. The system attempts to auto-detect column types based on headers and sample values
+4. Users can manually adjust column mappings if needed
+5. Once confirmed, the file is processed using the specified column mapping
+
+### Supported Column Types
+
+- **Item ID** (Optional): Unique identifier for items
+- **Name** (Required): Product/item name
+- **Quantity** (Required): Numeric quantity value
+- **Unit** (Required): Measurement unit (kg, g, l, ml, szt, etc.)
+
+### Auto-Detection Logic
+
+The system uses pattern matching to auto-detect column types:
+- **Item ID**: Looks for columns with headers containing "nr", "indeks", "id" or values matching item ID patterns
+- **Name**: Looks for columns with headers containing "nazwa", "towar", "produkt", "item" or text values longer than 3 characters
+- **Quantity**: Looks for columns with headers containing "ilo", "szt", "ilość", "quantity", "amount" or numeric values
+- **Unit**: Looks for columns with headers containing "jmz", "jednostka", "unit", "szt", "kg", "l", "ml", "g" or standard unit values
+
+### Benefits
+
+- Process Excel files with different column orders
+- Handle files with additional or missing columns
+- Support custom Excel templates
+- Reduce errors from fixed column assumptions
 
 1. [Project Overview](#project-overview)
 2. [Architecture & Technology Stack](#architecture--technology-stack)
 3. [Feature Documentation](#feature-documentation)
-4. [Flexible Excel Upload Feature](#-flexible-excel-upload-feature)
-5. [API Documentation](#api-documentation)
-6. [Database Schema](#database-schema)
-7. [Development Guide](#development-guide)
-8. [Deployment Guide](#deployment-guide)
-9. [Known Issues](#known-issues)
-10. [Bug Reports](#bug-reports)
-11. [Future Improvements](#future-improvements)
-12. [Iteration Roadmap](#iteration-roadmap)
+4. [API Documentation](#api-documentation)
+5. [Database Schema](#database-schema)
+6. [Development Guide](#development-guide)
+7. [Deployment Guide](#deployment-guide)
+8. [Known Issues](#known-issues)
+9. [Bug Reports](#bug-reports)
+10. [Future Improvements](#future-improvements)
+11. [Iteration Roadmap](#iteration-roadmap)
 
 ---
 
@@ -170,42 +201,6 @@ analyzeInventoryDifferences(previous: Item[], current: Item[]) {
 - Real-time data updates
 - Connection status monitoring
 - Graceful reconnection handling
-
----
-
-## 📁 Flexible Excel Upload Feature
-
-The Excel Inventory Manager now supports flexible Excel file uploads with column mapping, allowing users to process Excel files with various structures.
-
-### How It Works
-
-1. When you upload an Excel file, the application analyzes its structure
-2. The column mapping interface appears, showing sample data from each column
-3. The system attempts to auto-detect column types based on headers and sample values
-4. Users can manually adjust column mappings if needed
-5. Once confirmed, the file is processed using the specified column mapping
-
-### Supported Column Types
-
-- **Item ID** (Optional): Unique identifier for items
-- **Name** (Required): Product/item name
-- **Quantity** (Required): Numeric quantity value
-- **Unit** (Required): Measurement unit (kg, g, l, ml, szt, etc.)
-
-### Auto-Detection Logic
-
-The system uses pattern matching to auto-detect column types:
-- **Item ID**: Looks for columns with headers containing "nr", "indeks", "id" or values matching item ID patterns
-- **Name**: Looks for columns with headers containing "nazwa", "towar", "produkt", "item" or text values longer than 3 characters
-- **Quantity**: Looks for columns with headers containing "ilo", "szt", "ilość", "quantity", "amount" or numeric values
-- **Unit**: Looks for columns with headers containing "jmz", "jednostka", "unit", "szt", "kg", "l", "ml", "g" or standard unit values
-
-### Benefits
-
-- Process Excel files with different column orders
-- Handle files with additional or missing columns
-- Support custom Excel templates
-- Reduce errors from fixed column assumptions
 
 ---
 

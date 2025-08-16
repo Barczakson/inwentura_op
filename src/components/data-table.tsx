@@ -30,10 +30,14 @@ interface DataTableProps {
     name: string
     quantity: number
     unit: string
+    category?: string
     fileId?: string
     sourceFiles?: string[]
     count?: number
-    isAggregated?: boolean // Flag to indicate if item is aggregated
+    isAggregated?: boolean
+    isDuplicate?: boolean
+    duplicateCount?: number
+    originalIndex?: number
   }>
   onEdit?: (id: string) => void
   onDelete?: (id: string) => void
@@ -559,15 +563,6 @@ export function DataTable({
                     <div className="md:hidden">
                       <Badge variant="outline" className="text-xs mt-1">{item.unit}</Badge>
                     </div>
-                    {/* Show aggregation indicator */}
-                    {(item.isAggregated || (item.sourceFiles && item.sourceFiles.length > 1)) && (
-                      <Badge variant="secondary" className="text-xs mt-1">
-                        <div className="flex items-center gap-1">
-                          <FileSpreadsheet className="w-3 h-3" />
-                          <span>Zagregowane z {item.sourceFiles?.length || 0} plików</span>
-                        </div>
-                      </Badge>
-                    )}
                   </div>
               </TableCell>
               {!showAggregated && (
@@ -614,15 +609,6 @@ export function DataTable({
                         <FileSpreadsheet className="w-3 h-3" />
                         <span>Ręczny</span>
                       </span>
-                    )}
-                    {/* Show aggregation indicator */}
-                    {(item.isAggregated || (item.sourceFiles && item.sourceFiles.length > 1)) && (
-                      <Badge variant="secondary" className="text-xs mt-1">
-                        <div className="flex items-center gap-1">
-                          <FileSpreadsheet className="w-3 h-3" />
-                          <span>Zagregowane z {item.sourceFiles?.length || 0} plików</span>
-                        </div>
-                      </Badge>
                     )}
                   </div>
                 </TableCell>

@@ -6,9 +6,9 @@ import { POST } from '../upload/route'
 import { NextRequest } from 'next/server'
 
 // Mock Prisma
-jest.mock('@/lib/prisma', () => ({
+jest.mock('@/lib/db', () => ({
   __esModule: true,
-  default: {
+  db: {
     excelFile: {
       create: jest.fn(),
     },
@@ -29,10 +29,10 @@ jest.mock('xlsx', () => ({
   },
 }))
 
-import prisma from '@/lib/prisma'
+import { db } from '@/lib/db'
 import * as XLSX from 'xlsx'
 
-const mockPrisma = prisma as jest.Mocked<typeof prisma>
+const mockPrisma = db as jest.Mocked<typeof db>
 const mockXLSX = XLSX as jest.Mocked<typeof XLSX>
 
 describe('/api/excel/upload', () => {

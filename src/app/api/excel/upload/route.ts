@@ -23,54 +23,97 @@ export async function POST(request: NextRequest) {
     // Convert to JSON
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
 
-    // Process the data
+    // Process the data and build structure metadata
     const rows: any[] = []
+    const structure: any[] = []
     const aggregatedData = new Map()
+    
+    console.log('Processing Excel file with', jsonData.length, 'rows')
 
-    // Skip header row and process data
-    for (let i = 1; i < jsonData.length; i++) {
+    // Process each row and capture structure
+    for (let i = 0; i < jsonData.length; i++) {
       const row = jsonData[i] as any[]
       
-      // Skip empty rows or section headers (like "DODANE DO SPISU", "PÓŁPRODUKTY", etc.)
-      if (!row || row.length < 5 || !row[0] || typeof row[0] !== 'number') {
+      // Skip completely empty rows
+      if (!row || row.length === 0 || row.every(cell => !cell)) {
         continue
       }
+
+      const firstCell = String(row[0] || '').trim()
       
-      // Your Excel format: L.p. | Nr indeksu | Nazwa towaru | Ilość | JMZ
-      // Columns: 0=L.p., 1=Nr indeksu, 2=Nazwa towaru, 3=Ilość, 4=JMZ
-      let itemId: string | undefined = String(row[1] || '') // Nr indeksu
-      let name: string = String(row[2] || '') // Nazwa towaru  
-      let quantity: number = parseFloat(String(row[3] || 0)) // Ilość
-      let unit: string = String(row[4] || '').toLowerCase() // JMZ
-
-      // Clean up the data
-      name = name.trim()
-      unit = unit.trim()
-
-
-      if (name && !isNaN(quantity) && unit) {
-        const rowId = uuidv4()
-        rows.push({
-          id: rowId,
-          itemId,
-          name,
-          quantity,
-          unit
+      // Check if this is a known category header
+      const knownCategories = ['DODANE DO SPISU', 'PÓŁPRODUKTY', 'SUROWCE', 'PRODUKCJA']
+      const isKnownCategory = knownCategories.some(cat => 
+        firstCell.toUpperCase().includes(cat.toUpperCase())
+      )
+      
+      if (isKnownCategory) {
+        // This is a category header
+        structure.push({
+          type: 'header',
+          content: firstCell.toUpperCase(),
+          originalRowIndex: i,
+          excelRow: i + 1 // Excel is 1-indexed
         })
+        console.log(`Found header at row ${i + 1}: ${firstCell}`)
+        continue
+      }
 
-        // Aggregate data
-        const key = `${itemId || ''}|${name}|${unit}`
-        if (aggregatedData.has(key)) {
-          const existing = aggregatedData.get(key)
-          existing.quantity += quantity
-        } else {
-          aggregatedData.set(key, {
-            id: uuidv4(),
-            itemId,
+      // Check if this is a data row (has numeric L.p. and required columns)
+      const lp = Number(row[0])
+      if (!isNaN(lp) && lp > 0 && row.length >= 4) {
+        // This is a data row: L.p. | Nr indeksu | Nazwa towaru | Ilość | JMZ
+        const itemId = String(row[1] || '').trim()
+        const name = String(row[2] || '').trim()
+        const quantity = parseFloat(String(row[3] || 0))
+        const unit = String(row[4] || '').trim().toLowerCase()
+
+        if (name && !isNaN(quantity) && unit) {
+          const rowId = uuidv4()
+          const rowData = {
+            id: rowId,
+            itemId: itemId || null,
             name,
             quantity,
-            unit
+            unit,
+            originalRowIndex: i
+          }
+          
+          rows.push(rowData)
+          
+          // Add to structure
+          structure.push({
+            type: 'item',
+            content: {
+              lp: lp,
+              itemId: itemId || null,
+              name,
+              quantity,
+              unit
+            },
+            originalRowIndex: i,
+            excelRow: i + 1,
+            rowId: rowId
           })
+
+          // Build aggregation data (for quick access later)
+          const key = `${itemId || ''}|${name}|${unit}`
+          if (aggregatedData.has(key)) {
+            const existing = aggregatedData.get(key)
+            existing.quantity += quantity
+            existing.sourceRowIds.push(rowId)
+          } else {
+            aggregatedData.set(key, {
+              id: uuidv4(),
+              itemId: itemId || null,
+              name,
+              quantity,
+              unit,
+              sourceRowIds: [rowId]
+            })
+          }
+          
+          console.log(`Found item at row ${i + 1}: ${name} (${quantity} ${unit})`)
         }
       }
     }
@@ -80,17 +123,18 @@ export async function POST(request: NextRequest) {
     let aggregatedWithSourceFiles: any[] = []
     
     if (rows.length > 0) {
-      // Create Excel file record
+      // Create Excel file record with structure metadata
       const excelFile = await db.excelFile.create({
         data: {
           fileName: file.name,
           fileSize: file.size,
-          rowCount: rows.length
+          rowCount: rows.length,
+          originalStructure: structure // Store the complete structure
         }
       })
       fileId = excelFile.id
 
-      // Save all rows
+      // Save all rows (no aggregation during upload)
       await db.excelRow.createMany({
         data: rows.map(row => ({
           ...row,
@@ -98,29 +142,20 @@ export async function POST(request: NextRequest) {
         }))
       })
 
-      // Save aggregated data
+      // Save aggregated data for quick queries
       const aggregatedArray = Array.from(aggregatedData.values())
-      aggregatedWithSourceFiles = aggregatedArray.map(item => {
-        // Find all source rows that contributed to this aggregated item
-        const sourceRows = rows.filter(row => 
-          row.name === item.name && 
-          row.unit === item.unit && 
-          (row.itemId || null) === (item.itemId || null)
-        )
-
-        return {
-          ...item,
-          sourceFiles: JSON.stringify([fileId]), // Store as JSON string
-          count: sourceRows.length
-        }
-      })
+      aggregatedWithSourceFiles = aggregatedArray.map(item => ({
+        ...item,
+        sourceFiles: JSON.stringify([fileId]),
+        count: item.sourceRowIds.length,
+        fileId: excelFile.id
+      }))
 
       for (const item of aggregatedWithSourceFiles) {
-        // Check if item already exists to handle sourceFiles correctly
         const existingItem = await db.aggregatedItem.findUnique({
           where: {
             itemId_name_unit: {
-              itemId: item.itemId || null,
+              itemId: item.itemId,
               name: item.name,
               unit: item.unit
             }
@@ -128,7 +163,7 @@ export async function POST(request: NextRequest) {
         })
 
         if (existingItem) {
-          // Parse existing sourceFiles and add new file
+          // Update existing aggregated item
           let existingSourceFiles: string[] = []
           try {
             existingSourceFiles = existingItem.sourceFiles ? JSON.parse(existingItem.sourceFiles) : []
@@ -137,7 +172,6 @@ export async function POST(request: NextRequest) {
             existingSourceFiles = []
           }
           
-          // Add new file to source files if not already present
           if (!existingSourceFiles.includes(fileId)) {
             existingSourceFiles.push(fileId)
           }
@@ -145,7 +179,7 @@ export async function POST(request: NextRequest) {
           await db.aggregatedItem.update({
             where: {
               itemId_name_unit: {
-                itemId: item.itemId || null,
+                itemId: item.itemId,
                 name: item.name,
                 unit: item.unit
               }
@@ -159,25 +193,31 @@ export async function POST(request: NextRequest) {
             }
           })
         } else {
-          // Create new item
+          // Create new aggregated item
           await db.aggregatedItem.create({
             data: {
-              ...item,
-              fileId: excelFile.id
+              id: item.id,
+              itemId: item.itemId,
+              name: item.name,
+              quantity: item.quantity,
+              unit: item.unit,
+              fileId: excelFile.id,
+              sourceFiles: item.sourceFiles,
+              count: item.count
             }
           })
         }
       }
-    } else {
-      // If no rows, still return empty aggregated data
-      aggregatedWithSourceFiles = []
     }
+
+    console.log(`Successfully processed ${rows.length} items with ${structure.length} structure elements`)
 
     return NextResponse.json({
       success: true,
       fileId,
       rows,
-      aggregated: aggregatedWithSourceFiles
+      aggregated: aggregatedWithSourceFiles,
+      structure: structure
     })
 
   } catch (error) {

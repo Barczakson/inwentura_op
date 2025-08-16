@@ -6,12 +6,16 @@ import { GET, PUT, DELETE } from '../data/route'
 import { NextRequest } from 'next/server'
 
 // Mock Prisma
-jest.mock('@/lib/prisma', () => ({
+jest.mock('@/lib/db', () => ({
   __esModule: true,
-  default: {
+  db: {
     aggregatedItem: {
       findMany: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
+    },
+    excelFile: {
+      findMany: jest.fn(),
       delete: jest.fn(),
     },
     excelRow: {
@@ -20,9 +24,9 @@ jest.mock('@/lib/prisma', () => ({
   },
 }))
 
-import prisma from '@/lib/prisma'
+import { db } from '@/lib/db'
 
-const mockPrisma = prisma as jest.Mocked<typeof prisma>
+const mockPrisma = db as jest.Mocked<typeof db>
 
 describe('/api/excel/data', () => {
   beforeEach(() => {

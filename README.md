@@ -1,6 +1,16 @@
-# 🚀 Welcome to Z.ai Code Scaffold
+# Excel Inventory Manager
 
-A modern, production-ready web application scaffold powered by cutting-edge technologies, designed to accelerate your development with [Z.ai](https://chat.z.ai)'s AI-powered coding assistance.
+A powerful inventory management application that processes Excel files and automatically aggregates data based on item names and IDs. This tool helps you manage inventory from various Excel formats with a flexible column mapping feature.
+
+## 🚀 Features
+
+- **📈 Excel Processing**: Upload and process Excel files (.xlsx, .xls)
+- **🔄 Automatic Aggregation**: Automatically combines items with the same name/ID
+- **📊 Data Management**: Edit, delete, and export inventory items
+- **📱 Responsive UI**: Works on all device sizes with dark mode support
+- **📁 Flexible Column Mapping**: Handle various Excel file structures with our column mapping interface
+- **💾 Database Storage**: Persistent storage using Prisma ORM with SQLite
+- **🔌 Real-time Updates**: WebSocket integration for live data updates
 
 ## ✨ Technology Stack
 

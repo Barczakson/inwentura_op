@@ -45,33 +45,35 @@ model ExcelFile {
   fileSize    Int
   rowCount    Int?
   uploadDate  DateTime @default(now())
+  originalStructure Json? // Stores exact file structure with headers and items
   rows        ExcelRow[]
   aggregated  AggregatedItem[]
 }
 
 model ExcelRow {
-  id          String    @id @default(cuid())
+  id               String    @id @default(cuid())
+  itemId           String?
+  name             String
+  quantity         Float
+  unit             String
+  originalRowIndex Int       // Position in original Excel file
+  fileId           String
+  file             ExcelFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now())
+}
+
+model AggregatedItem {
+  id          String   @id @default(cuid())
   itemId      String?
   name        String
   quantity    Float
   unit        String
-  fileId      String
-  file        ExcelFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
-}
-
-model AggregatedItem {
-  id        String   @id @default(cuid())
-  itemId    String?
-  name      String
-  quantity  Float
-  unit      String
-  fileId    String?
-  file      ExcelFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  fileId      String?
+  file        ExcelFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
   sourceFiles String? // JSON array of file IDs
-  count     Int?     // Number of source rows
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  count       Int?     // Number of source rows
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([itemId, name, unit])
 }

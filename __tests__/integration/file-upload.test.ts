@@ -8,40 +8,60 @@ import { GET as dataGET } from '@/app/api/excel/data/route'
 import { NextRequest } from 'next/server'
 
 // Mock Prisma with realistic responses
-jest.mock('@/lib/prisma', () => {
+jest.mock('@/lib/db', () => {
   const mockData = {
     files: [] as any[],
     rows: [] as any[],
-    aggregatedItems: [] as any[],
+    aggregated: [] as any[],
   }
 
   return {
     __esModule: true,
-    default: {
+    db: {
       excelFile: {
-        create: jest.fn((data) => {
-          const file = { 
-            id: `file-${Date.now()}`, 
-            ...data.data,
-            uploadDate: new Date() 
-          }
+        create: jest.fn().mockImplementation((data) => {
+          const file = { id: `file-${Date.now()}`, ...data.data }
           mockData.files.push(file)
           return Promise.resolve(file)
         }),
+        findMany: jest.fn().mockImplementation(() => Promise.resolve(mockData.files)),
+        delete: jest.fn().mockImplementation((where) => {
+          mockData.files = mockData.files.filter(file => file.id !== where.where.id)
+          return Promise.resolve({ count: 1 })
+        }),
       },
       excelRow: {
-        createMany: jest.fn((data) => {
-          mockData.rows.push(...data.data)
+        createMany: jest.fn().mockImplementation((data) => {
+          mockData.rows.push(...data.data.map((row: any) => ({ id: `row-${Date.now()}`, ...row })))
           return Promise.resolve({ count: data.data.length })
         }),
-        findMany: jest.fn(() => Promise.resolve(mockData.rows)),
+        findMany: jest.fn().mockImplementation(() => Promise.resolve(mockData.rows)),
       },
       aggregatedItem: {
-        createMany: jest.fn((data) => {
-          mockData.aggregatedItems.push(...data.data)
-          return Promise.resolve({ count: data.data.length })
+        create: jest.fn().mockImplementation((data) => {
+          const item = { id: `item-${Date.now()}`, ...data.data }
+          mockData.aggregated.push(item)
+          return Promise.resolve(item)
         }),
-        findMany: jest.fn(() => Promise.resolve(mockData.aggregatedItems)),
+        createMany: jest.fn().mockImplementation((data) => {
+          const items = data.data.map((item: any) => ({ id: `item-${Date.now()}`, ...item }))
+          mockData.aggregated.push(...items)
+          return Promise.resolve({ count: items.length })
+        }),
+        findMany: jest.fn().mockImplementation(() => Promise.resolve(mockData.aggregated)),
+        findUnique: jest.fn().mockImplementation(() => Promise.resolve(null)),
+        update: jest.fn().mockImplementation((data) => {
+          const index = mockData.aggregated.findIndex(item => 
+            item.itemId === data.where.itemId_name_unit.itemId &&
+            item.name === data.where.itemId_name_unit.name &&
+            item.unit === data.where.itemId_name_unit.unit
+          )
+          if (index >= 0) {
+            mockData.aggregated[index] = { ...mockData.aggregated[index], ...data.data }
+            return Promise.resolve(mockData.aggregated[index])
+          }
+          return Promise.reject(new Error('Item not found'))
+        }),
       },
     },
   }
