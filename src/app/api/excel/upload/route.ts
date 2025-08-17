@@ -3,6 +3,14 @@ import * as XLSX from 'xlsx'
 import { db } from '@/lib/db'
 import { v4 as uuidv4 } from 'uuid'
 
+// File validation constants
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const ALLOWED_MIME_TYPES = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/octet-stream'
+]
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
@@ -12,9 +20,67 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // Read the file
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ 
+        error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB, but received ${(file.size / 1024 / 1024).toFixed(2)}MB` 
+      }, { status: 400 })
+    }
+
+    // Validate file type
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      return NextResponse.json({ 
+        error: `Invalid file type: ${file.type}. Allowed types: Excel files (.xlsx, .xls)` 
+      }, { status: 400 })
+    }
+
+    // Validate file extension
+    const fileName = file.name.toLowerCase()
+    if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+      return NextResponse.json({ 
+        error: 'Invalid file extension. Only .xlsx and .xls files are allowed.' 
+      }, { status: 400 })
+    }
+
+    // Check for suspiciously small files
+    if (file.size < 100) {
+      return NextResponse.json({ 
+        error: 'File is too small to be a valid Excel file.' 
+      }, { status: 400 })
+    }
+
+    // Read the file with error recovery
     const buffer = Buffer.from(await file.arrayBuffer())
-    const workbook = XLSX.read(buffer, { type: 'buffer' })
+    let workbook: XLSX.WorkBook
+    
+    try {
+      workbook = XLSX.read(buffer, { type: 'buffer' })
+    } catch (xlsxError) {
+      console.warn('XLSX read failed, attempting recovery:', xlsxError)
+      
+      // Try with different options for corrupted files
+      try {
+        workbook = XLSX.read(buffer, { 
+          type: 'buffer', 
+          cellText: false,
+          cellNF: false,
+          cellDates: true
+        })
+        console.log('File recovered with alternative settings')
+      } catch (recoveryError) {
+        console.error('File recovery failed:', recoveryError)
+        return NextResponse.json({ 
+          error: 'Unable to read Excel file. The file may be corrupted or in an unsupported format.' 
+        }, { status: 400 })
+      }
+    }
+
+    // Validate workbook structure
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      return NextResponse.json({ 
+        error: 'Excel file contains no sheets or is corrupted.' 
+      }, { status: 400 })
+    }
 
     // Get the first sheet
     const sheetName = workbook.SheetNames[0]

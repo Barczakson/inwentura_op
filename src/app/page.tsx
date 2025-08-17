@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,11 +24,25 @@ import { Badge } from '@/components/ui/badge'
 import { Upload, FileSpreadsheet, Plus, Edit, Trash2, Download, BarChart, X } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { DataTable } from '@/components/data-table'
-import { EditItemDialog } from '@/components/edit-item-dialog'
-import { ColumnMapping } from '@/components/column-mapping'
+
+// Lazy load heavy components
+const EditItemDialog = lazy(() => import('@/components/edit-item-dialog').then(m => ({ default: m.EditItemDialog })))
+const ColumnMappingComponent = lazy(() => import('@/components/column-mapping').then(m => ({ default: m.ColumnMapping })))
 import { formatQuantityWithConversion } from '@/lib/unit-conversion'
-import { getFileColorClass, getFileBorderColor, getFileBackgroundColor } from '@/lib/colors'
+import { getFileColorClass, getFileBorderColor, getFileBackgroundColor, getFileInlineStyle, getFileInlineStyleWithShadow } from '@/lib/colors'
+import { validateFile, validateExcelStructure, getValidationSummary } from '@/lib/file-validation'
+import { useUploadProgress } from '@/hooks/use-upload-progress'
+import { UploadProgressComponent } from '@/components/upload-progress'
+import { usePagination } from '@/hooks/use-pagination'
 import { toast } from '@/hooks/use-toast'
+import { 
+  handleApiResponse, 
+  handleAsyncOperation, 
+  showErrorToast, 
+  showSuccessToast,
+  createError,
+  ErrorType
+} from '@/lib/error-handler'
 import Link from 'next/link'
 
 interface ExcelRow {
@@ -66,6 +80,25 @@ interface UploadedFile {
 export default function Home() {
   const [file, setFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const { uploadProgress, uploadWithProgress, resetProgress } = useUploadProgress()
+  const pagination = usePagination({
+    initialLimit: 25, // Smaller limit for better UX
+    initialSortBy: 'name'
+  })
+  
+  // Separate pagination hook for file view
+  const filePagination = usePagination({
+    initialPage: 1,
+    initialLimit: 50, // Larger limit for file view
+    initialSortBy: 'name'
+  })
+  
+  // Pagination hook for raw data in general view
+  const rawDataPagination = usePagination({
+    initialPage: 1,
+    initialLimit: 50, // Larger limit for raw data
+    initialSortBy: 'name'
+  })
   const [excelData, setExcelData] = useState<ExcelRow[]>([])
   const [aggregatedData, setAggregatedData] = useState<AggregatedItem[]>([])
   const [editingItem, setEditingItem] = useState<AggregatedItem | null>(null)
@@ -74,6 +107,8 @@ export default function Home() {
   const [isMounted, setIsMounted] = useState(false)
   const [currentView, setCurrentView] = useState<'general' | 'file'>('general')
   const [currentFileName, setCurrentFileName] = useState<string>('')
+  const [currentFileId, setCurrentFileId] = useState<string>('')
+  const [activeTab, setActiveTab] = useState<'aggregated' | 'raw'>('aggregated')
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [bulkEditMode, setBulkEditMode] = useState(false)
   const [inlineEditingItem, setInlineEditingItem] = useState<string | null>(null)
@@ -102,16 +137,7 @@ export default function Home() {
     setIsMounted(true)
   }, [])
 
-  // Load initial data only after component is mounted on client
-  useEffect(() => {
-    if (!isMounted) return
-    
-    loadData()
-    loadUploadedFiles()
-  }, [isMounted])
-
-
-  const loadUploadedFiles = async () => {
+  const loadUploadedFiles = useCallback(async () => {
     try {
       const response = await fetch('/api/excel/files')
       if (response.ok) {
@@ -123,49 +149,215 @@ export default function Home() {
     } catch (error) {
       console.error('Error loading uploaded files:', error)
     }
-  }
+  }, [])
 
-  const loadData = async () => {
-    try {
-      console.log('loadData: Fetching from standard data API...')
+  const loadData = useCallback(async (useCurrentFilters = true) => {
+    const result = await handleAsyncOperation(async () => {
+      pagination.setIsLoading(true)
       
-      const response = await fetch('/api/excel/data?includeRaw=true')
+      // Build URL with pagination parameters (only for general view)
+      const url = new URL('/api/excel/data', window.location.origin)
+      url.searchParams.set('includeRaw', 'true')
       
-      if (response.ok) {
-        const data = await response.json()
-        
-        console.log('loadData: Received data:', {
-          aggregatedCount: data.aggregated?.length || 0,
-          rawCount: data.raw?.length || 0
+      if (currentView === 'general' && useCurrentFilters) {
+        // Add pagination parameters for general view
+        pagination.queryParams.forEach((value, key) => {
+          url.searchParams.set(key, value)
         })
-        
-        // Add isAggregated flag to aggregated data
-        const aggregatedWithFlags = (data.aggregated || []).map((item: any) => ({
-          ...item,
-          isAggregated: (item.sourceFiles && item.sourceFiles.length > 1) || 
-                       (item.count && item.count > 1) ||
-                       (item.sourceFiles && item.sourceFiles.length > 0 && 
-                        !item.fileId) // If it has sourceFiles but no direct fileId, it's aggregated
-        }))
-        
-        setAggregatedData(aggregatedWithFlags)
-        setExcelData(data.raw || [])
-        console.log('✅ loadData: State updated')
-      } else {
-        console.error('Failed to load data:', response.status)
       }
-    } catch (error) {
-      console.error('Error loading data:', error)
-    }
-  }
+      
+      const response = await fetch(url.toString())
+      const data = await handleApiResponse(response)
+      
+      
+      // Update pagination metadata if available
+      if (data.pagination && currentView === 'general' && useCurrentFilters) {
+        pagination.setPaginationMeta(data.pagination)
+      }
+      
+      // Add isAggregated flag to aggregated data
+      const aggregatedWithFlags = (data.aggregated || []).map((item: any) => ({
+        ...item,
+        isAggregated: (item.sourceFiles && item.sourceFiles.length > 1) || 
+                     (item.count && item.count > 1) ||
+                     (item.sourceFiles && item.sourceFiles.length > 0 && 
+                      !item.fileId) // If it has sourceFiles but no direct fileId, it's aggregated
+      }))
+      
+      setAggregatedData(aggregatedWithFlags)
+      setExcelData(data.raw || [])
+      
+      return data
+    }, 'Nie udało się załadować danych')
 
-  const onDrop = (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0]
-    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
-      setFile(file)
-      // For better Excel compatibility, show column mapping interface
-      setShowColumnMapping(true)
+    pagination.setIsLoading(false)
+    return result
+  }, [currentView, pagination.setIsLoading, pagination.setPaginationMeta, pagination.queryParams])
+
+  // Load file data with pagination
+  const loadFileData = useCallback(async (fileId: string) => {
+    const result = await handleAsyncOperation(async () => {
+      filePagination.setIsLoading(true)
+      
+      // Build URL with pagination parameters for file view
+      const url = new URL('/api/excel/data', window.location.origin)
+      url.searchParams.set('fileId', fileId)
+      url.searchParams.set('includeRaw', 'true')
+      
+      // Add pagination parameters for file view
+      filePagination.queryParams.forEach((value, key) => {
+        url.searchParams.set(key, value)
+      })
+      
+      const response = await fetch(url.toString())
+      const data = await handleApiResponse(response)
+      
+      // Update pagination metadata if available
+      if (data.pagination) {
+        filePagination.setPaginationMeta(data.pagination)
+      }
+      
+      // For file view, show only the raw data from this specific file
+      setExcelData(data.raw || [])
+      setAggregatedData([]) // Clear aggregated data to avoid confusion
+      
+      return data
+    }, 'Nie udało się załadować danych pliku')
+
+    filePagination.setIsLoading(false)
+    return result
+  }, [filePagination.setIsLoading, filePagination.setPaginationMeta, filePagination.queryParams])
+
+  // Load raw data with pagination for general view
+  const loadRawData = useCallback(async () => {
+    const result = await handleAsyncOperation(async () => {
+      rawDataPagination.setIsLoading(true)
+      
+      // Build URL with pagination parameters for raw data view
+      const url = new URL('/api/excel/data', window.location.origin)
+      url.searchParams.set('includeRaw', 'true')
+      url.searchParams.set('rawOnly', 'true') // New parameter to get only raw data
+      
+      // Add pagination parameters for raw data view
+      rawDataPagination.queryParams.forEach((value, key) => {
+        url.searchParams.set(key, value)
+      })
+      
+      const response = await fetch(url.toString())
+      const data = await handleApiResponse(response)
+      
+      // Update pagination metadata if available
+      if (data.pagination) {
+        rawDataPagination.setPaginationMeta(data.pagination)
+      }
+      
+      // For raw data view, show only the raw data
+      setExcelData(data.raw || [])
+      
+      return data
+    }, 'Nie udało się załadować surowych danych')
+
+    rawDataPagination.setIsLoading(false)
+    return result
+  }, [rawDataPagination.setIsLoading, rawDataPagination.setPaginationMeta, rawDataPagination.queryParams])
+
+  // Load initial data only after component is mounted on client
+  useEffect(() => {
+    if (!isMounted) return
+    
+    loadData()
+    loadUploadedFiles()
+    
+    // Also load raw data if raw tab is active
+    if (activeTab === 'raw' && currentView === 'general') {
+      loadRawData()
     }
+  }, [isMounted, loadData, loadUploadedFiles, loadRawData, activeTab, currentView])
+
+  // Reload data when pagination state changes (only for general view)
+  useEffect(() => {
+    if (!isMounted || currentView !== 'general') return
+    
+    loadData(true)
+  }, [
+    pagination.paginationState.page,
+    pagination.paginationState.limit,
+    pagination.paginationState.search,
+    pagination.paginationState.sortBy,
+    pagination.paginationState.sortDirection,
+    isMounted,
+    currentView,
+    loadData
+  ])
+
+  // Reload file data when file pagination state changes
+  useEffect(() => {
+    if (!isMounted || currentView !== 'file' || !currentFileId) return
+    
+    loadFileData(currentFileId)
+  }, [
+    filePagination.paginationState.page,
+    filePagination.paginationState.limit,
+    filePagination.paginationState.search,
+    filePagination.paginationState.sortBy,
+    filePagination.paginationState.sortDirection,
+    isMounted,
+    currentView,
+    currentFileId,
+    loadFileData
+  ])
+
+  // Reload raw data when raw data pagination state changes (general view + raw tab only)
+  useEffect(() => {
+    if (!isMounted || currentView !== 'general' || activeTab !== 'raw') return
+    
+    loadRawData()
+  }, [
+    rawDataPagination.paginationState.page,
+    rawDataPagination.paginationState.limit,
+    rawDataPagination.paginationState.search,
+    rawDataPagination.paginationState.sortBy,
+    rawDataPagination.paginationState.sortDirection,
+    isMounted,
+    currentView,
+    activeTab,
+    loadRawData
+  ])
+
+  const onDrop = async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0]
+    
+    if (!file) return
+
+    // Validate file
+    const basicValidation = validateFile(file)
+    if (!basicValidation.isValid) {
+      showErrorToast(createError(ErrorType.VALIDATION, basicValidation.error))
+      return
+    }
+
+    // Show warnings if any
+    if (basicValidation.warnings && basicValidation.warnings.length > 0) {
+      toast({
+        title: "Ostrzeżenia dotyczące pliku",
+        description: basicValidation.warnings.join('\n'),
+        variant: "default",
+      })
+    }
+
+    // Validate Excel structure
+    const structureValidation = await validateExcelStructure(file)
+    if (!structureValidation.isValid) {
+      showErrorToast(createError(ErrorType.FILE_PROCESSING, structureValidation.error))
+      return
+    }
+
+    // File is valid
+    setFile(file)
+    showSuccessToast(getValidationSummary(basicValidation, file), "Plik zaakceptowany")
+    
+    // For better Excel compatibility, show column mapping interface
+    setShowColumnMapping(true)
   }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -185,6 +377,8 @@ export default function Home() {
     headerRow: number
   } | null = null) => {
     setIsUploading(true)
+    resetProgress()
+    
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -196,14 +390,7 @@ export default function Home() {
         formData.append('columnMapping', JSON.stringify(mapping))
       }
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        
+      await uploadWithProgress(endpoint, formData, async (data) => {
         // Add to uploaded files list
         const newUploadedFile: UploadedFile = {
           id: data.fileId,
@@ -218,26 +405,11 @@ export default function Home() {
         await loadData()
         await loadUploadedFiles()
         
-        toast({
-          title: "Sukces",
-          description: `Plik "${file.name}" został przesłany i przetworzony pomyślnie.`,
-        })
-      } else {
-        const error = await response.json()
-        console.error('Upload error:', error)
-        toast({
-          title: "Error",
-          description: error.error || "Failed to upload file",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error)
-      toast({
-        title: "Error",
-        description: "Failed to upload file",
-        variant: "destructive",
+        showSuccessToast(`Plik "${file.name}" został przesłany i przetworzony pomyślnie.`)
       })
+    } catch (error) {
+      // Error is already handled by uploadWithProgress hook
+      console.error('Error uploading file:', error)
     } finally {
       setIsUploading(false)
     }
@@ -256,7 +428,7 @@ export default function Home() {
   }
 
   const handleSaveEdit = async (updatedItem: AggregatedItem) => {
-    try {
+    const result = await handleAsyncOperation(async () => {
       const response = await fetch('/api/excel/data', {
         method: 'PUT',
         headers: {
@@ -268,61 +440,35 @@ export default function Home() {
         })
       })
 
-      if (response.ok) {
-        setAggregatedData(prev => 
-          prev.map(item => item.id === updatedItem.id ? updatedItem : item)
-        )
-        setIsEditDialogOpen(false)
-        setEditingItem(null)
-        toast({
-          title: "Success",
-          description: "Item updated successfully.",
-        })
-      } else {
-        const error = await response.json()
-        toast({
-          title: "Error",
-          description: error.error || "Failed to update item",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error('Error updating item:', error)
-      toast({
-        title: "Error",
-        description: "Failed to update item",
-        variant: "destructive",
-      })
-    }
+      await handleApiResponse(response)
+
+      setAggregatedData(prev => 
+        prev.map(item => item.id === updatedItem.id ? updatedItem : item)
+      )
+      setIsEditDialogOpen(false)
+      setEditingItem(null)
+      
+      showSuccessToast("Pozycja została zaktualizowana pomyślnie.")
+      return true
+    }, 'Nie udało się zaktualizować pozycji')
+
+    return result
   }
 
   const handleDeleteItem = async (id: string) => {
-    try {
+    const result = await handleAsyncOperation(async () => {
       const response = await fetch(`/api/excel/data?id=${id}`, {
         method: 'DELETE'
       })
 
-      if (response.ok) {
-        setAggregatedData(prev => prev.filter(item => item.id !== id))
-        toast({
-          title: "Success",
-          description: "Item deleted successfully.",
-        })
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to delete item",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error('Error deleting item:', error)
-      toast({
-        title: "Error",
-        description: "Failed to delete item",
-        variant: "destructive",
-      })
-    }
+      await handleApiResponse(response)
+
+      setAggregatedData(prev => prev.filter(item => item.id !== id))
+      showSuccessToast("Pozycja została usunięta pomyślnie.")
+      return true
+    }, 'Nie udało się usunąć pozycji')
+
+    return result
   }
 
   const handleColumnMappingComplete = (mapping: { 
@@ -453,41 +599,22 @@ export default function Home() {
   }
 
   const handleViewFileData = async (fileId: string) => {
-    try {
-      const response = await fetch(`/api/excel/data?fileId=${fileId}&includeRaw=true`)
-      if (response.ok) {
-        const data = await response.json()
-        
-        // Add isAggregated flag to aggregated data
-        const aggregatedWithData = (data.aggregated || []).map((item: any) => ({
-          ...item,
-          isAggregated: (item.sourceFiles && item.sourceFiles.length > 1) || 
-                       (item.count && item.count > 1) ||
-                       (item.sourceFiles && item.sourceFiles.length > 0 && 
-                        !item.fileId) // If it has sourceFiles but no direct fileId, it's aggregated
-        }))
-        
-        setExcelData(data.raw || [])
-        setAggregatedData(aggregatedWithData)
-        
-        // Find the file name
-        const file = uploadedFiles.find(f => f.id === fileId)
-        setCurrentFileName(file?.name || 'Nieznany plik')
-        setCurrentView('file')
-        
-        toast({
-          title: "Sukces",
-          description: "Załadowano dane z wybranego pliku.",
-        })
-      } else {
-        console.error('Failed to load file data:', response.status)
-      }
-    } catch (error) {
-      console.error('Error loading file data:', error)
+    // Find the file name
+    const file = uploadedFiles.find(f => f.id === fileId)
+    setCurrentFileName(file?.name || 'Nieznany plik')
+    setCurrentFileId(fileId)
+    setCurrentView('file')
+    
+    // Reset file pagination to first page
+    filePagination.reset()
+    
+    // Load file data with pagination
+    const result = await loadFileData(fileId)
+    
+    if (result) {
       toast({
-        title: "Błąd",
-        description: "Nie udało się załadować danych z pliku",
-        variant: "destructive",
+        title: "Sukces",
+        description: `Wyświetlanie danych z pliku: ${file?.name || 'Nieznany plik'}`
       })
     }
   }
@@ -495,6 +622,7 @@ export default function Home() {
   const handleReturnToGeneralView = async () => {
     setCurrentView('general')
     setCurrentFileName('')
+    setCurrentFileId('')
     setSelectedItems(new Set())
     setBulkEditMode(false)
     await loadData()
@@ -690,11 +818,20 @@ export default function Home() {
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              <ColumnMapping 
-                file={file} 
-                onMappingComplete={handleColumnMappingComplete}
-                onCancel={handleCancelColumnMapping}
-              />
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-8">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                    <p className="text-sm text-muted-foreground">Ładowanie mapowania kolumn...</p>
+                  </div>
+                </div>
+              }>
+                <ColumnMappingComponent 
+                  file={file} 
+                  onMappingComplete={handleColumnMappingComplete}
+                  onCancel={handleCancelColumnMapping}
+                />
+              </Suspense>
             </div>
           </div>
         )}
@@ -741,6 +878,18 @@ export default function Home() {
           </CardContent>
         </Card>
 
+        {/* Upload Progress */}
+        {(uploadProgress.status !== 'idle' || isUploading) && (
+          <UploadProgressComponent
+            progress={uploadProgress}
+            fileName={file?.name}
+            onClose={() => {
+              resetProgress()
+              setFile(null)
+            }}
+          />
+        )}
+
         {/* Uploaded Files Preview */}
         {uploadedFiles.length > 0 && (
           <Card>
@@ -766,7 +915,13 @@ export default function Home() {
                   >
                     <div className="flex items-center gap-3">
                       {(uploadedFile.id && typeof uploadedFile.id === 'string') && (
-                        <div className={`w-4 h-4 rounded-full border-2 border-white shadow ${getFileBackgroundColor(uploadedFile.id)}`}></div>
+                        <div 
+                          className="w-5 h-5 rounded-full border-2"
+                          style={{
+                            ...getFileInlineStyleWithShadow(uploadedFile.id),
+                            borderColor: '#ffffff'
+                          }}
+                        ></div>
                       )}
                       <FileSpreadsheet className="w-8 h-8 text-green-600" />
                       <div>
@@ -844,68 +999,82 @@ export default function Home() {
                   </Card>
                 )}
                 
-                <Tabs defaultValue="aggregated" className="space-y-4">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="aggregated">
-                      Dane Zagregowane ({aggregatedData.length})
-                    </TabsTrigger>
+                <Tabs 
+                  defaultValue={currentView === 'file' ? 'raw' : 'aggregated'} 
+                  value={currentView === 'file' ? 'raw' : activeTab}
+                  onValueChange={(value) => setActiveTab(value as 'aggregated' | 'raw')}
+                  className="space-y-4"
+                >
+                  <TabsList className={`grid w-full ${currentView === 'file' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                    {currentView !== 'file' && (
+                      <TabsTrigger value="aggregated">
+                        Dane Zagregowane ({aggregatedData.length})
+                      </TabsTrigger>
+                    )}
                     <TabsTrigger value="raw">
-                      Dane Surowe ({excelData.length})
+                      {currentView === 'file' ? `Dane z pliku (${excelData.length})` : `Dane Surowe (${excelData.length})`}
                     </TabsTrigger>
                   </TabsList>
 
-            <TabsContent value="aggregated">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Dane Zagregowane</CardTitle>
-                      <CardDescription>
-                        Pozycje o tej samej nazwie i ID zostały automatycznie zsumowane
-                        {bulkEditMode && selectedItems.size > 0 && (
-                          <span className="ml-2 text-primary">
-                            • Wybrano: {selectedItems.size} pozycji
-                          </span>
+            {currentView !== 'file' && (
+              <TabsContent value="aggregated">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Dane Zagregowane</CardTitle>
+                        <CardDescription>
+                          Pozycje o tej samej nazwie i ID zostały automatycznie zsumowane
+                        </CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                        {aggregatedData.length > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleExportData('aggregated')}
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Eksportuj
+                          </Button>
                         )}
-                      </CardDescription>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      {aggregatedData.length > 0 && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleExportData('aggregated')}
-                        >
-                          <Download className="w-4 h-4 mr-2" />
-                          Eksportuj
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {aggregatedData.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground">Brak zagregowanych danych. Prześlij plik Excel, aby rozpocząć.</p>
-                    </div>
-                  ) : (
-                    <DataTable
-                      data={aggregatedData}
-                      onEdit={handleEditItemById}
-                      onDelete={handleDeleteItem}
-                      inlineEditingItem={inlineEditingItem}
-                      inlineEditValue={inlineEditValue}
-                      onInlineEditValueChange={(value) => setInlineEditValue(value)}
-                      showAggregated={true}
-                      uploadedFiles={uploadedFiles}
-                      onStartInlineEdit={handleStartInlineEdit}
-                      onCancelInlineEdit={handleCancelInlineEdit}
-                      onSaveInlineEdit={handleSaveInlineEdit}
-                    />
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+                  </CardHeader>
+                  <CardContent>
+                    {aggregatedData.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-muted-foreground">Brak zagregowanych danych. Prześlij plik Excel, aby rozpocząć.</p>
+                      </div>
+                    ) : (
+                      <DataTable
+                        data={aggregatedData}
+                        onEdit={handleEditItemById}
+                        onDelete={handleDeleteItem}
+                        inlineEditingItem={inlineEditingItem}
+                        inlineEditValue={inlineEditValue}
+                        onInlineEditValueChange={(value) => setInlineEditValue(value)}
+                        showAggregated={true}
+                        uploadedFiles={uploadedFiles}
+                        onStartInlineEdit={handleStartInlineEdit}
+                        onCancelInlineEdit={handleCancelInlineEdit}
+                        onSaveInlineEdit={handleSaveInlineEdit}
+                        // Pagination props (only for general view)
+                        paginationState={currentView === 'general' ? pagination.paginationState : undefined}
+                        paginationMeta={currentView === 'general' ? pagination.paginationMeta : undefined}
+                        onPaginationChange={currentView === 'general' ? {
+                          setPage: pagination.setPage,
+                          setLimit: pagination.setLimit,
+                          setSearch: pagination.setSearch,
+                          setSorting: pagination.setSorting
+                        } : undefined}
+                        isLoading={currentView === 'general' ? pagination.isLoading : false}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
 
             <TabsContent value="raw">
               <Card>
@@ -944,6 +1113,21 @@ export default function Home() {
                       onInlineEditValueChange={(value) => setInlineEditValue(value)}
                       inlineEditingItem={inlineEditingItem}
                       inlineEditValue={inlineEditValue}
+                      // Pagination props for raw data (file view or general view)
+                      paginationState={currentView === 'file' ? filePagination.paginationState : rawDataPagination.paginationState}
+                      paginationMeta={currentView === 'file' ? filePagination.paginationMeta : rawDataPagination.paginationMeta}
+                      onPaginationChange={currentView === 'file' ? {
+                        setPage: filePagination.setPage,
+                        setLimit: filePagination.setLimit,
+                        setSearch: filePagination.setSearch,
+                        setSorting: filePagination.setSorting
+                      } : {
+                        setPage: rawDataPagination.setPage,
+                        setLimit: rawDataPagination.setLimit,
+                        setSearch: rawDataPagination.setSearch,
+                        setSorting: rawDataPagination.setSorting
+                      }}
+                      isLoading={currentView === 'file' ? filePagination.isLoading : rawDataPagination.isLoading}
                     />
                   )}
                 </CardContent>
@@ -997,15 +1181,17 @@ export default function Home() {
         </div>
 
         {/* Edit Item Dialog */}
-        <EditItemDialog
-          isOpen={isEditDialogOpen}
-          onClose={() => {
-            setIsEditDialogOpen(false)
-            setEditingItem(null)
-          }}
-          item={editingItem}
-          onSave={handleSaveEdit}
-        />
+        <Suspense fallback={null}>
+          <EditItemDialog
+            isOpen={isEditDialogOpen}
+            onClose={() => {
+              setIsEditDialogOpen(false)
+              setEditingItem(null)
+            }}
+            item={editingItem}
+            onSave={handleSaveEdit}
+          />
+        </Suspense>
       </div>
     </div>
   )

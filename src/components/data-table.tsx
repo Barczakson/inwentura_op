@@ -19,9 +19,19 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Edit, Trash2, ArrowUpDown, Search, CheckSquare, Square, ChevronUp, ChevronDown, FileSpreadsheet, Circle, Check, X } from 'lucide-react'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { formatQuantityWithConversion } from '@/lib/unit-conversion'
-import { abbreviateFileName, getFileColorClass, getFileBackgroundColor, getFileBorderColor } from '@/lib/colors'
+import { abbreviateFileName, getFileColorClass, getFileBackgroundColor, getFileBorderColor, getFileInlineStyle } from '@/lib/colors'
+import { useDebounce } from '@/hooks/use-debounce'
+import { VirtualizedDataTable } from './virtualized-data-table'
+import { 
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
 
 interface DataTableProps {
   data: Array<{
@@ -57,6 +67,32 @@ interface DataTableProps {
   onSaveInlineEdit?: (itemId: string) => void
   onInlineEditValueChange?: (value: string) => void
   groupedByFile?: boolean // New prop for file grouping
+  // Pagination props
+  paginationState?: {
+    page: number
+    limit: number
+    search: string
+    sortBy: string
+    sortDirection: 'asc' | 'desc'
+  }
+  paginationMeta?: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+    hasNext: boolean
+    hasPrev: boolean
+  }
+  onPaginationChange?: {
+    setPage: (page: number) => void
+    setLimit: (limit: number) => void
+    setSearch: (search: string) => void
+    setSorting: (sortBy: string, direction: 'asc' | 'desc') => void
+  }
+  isLoading?: boolean
+  // Virtualization
+  virtualizationThreshold?: number // Use virtualization when data.length > threshold
+  enableVirtualization?: boolean // Force enable/disable virtualization
 }
 
 export function DataTable({ 
@@ -75,13 +111,42 @@ export function DataTable({
   onCancelInlineEdit,
   onSaveInlineEdit,
   onInlineEditValueChange,
-  groupedByFile = false // New prop
+  groupedByFile = false, // New prop
+  paginationState,
+  paginationMeta,
+  onPaginationChange,
+  isLoading = false,
+  virtualizationThreshold = 100,
+  enableVirtualization
 }: DataTableProps) {
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sortColumn, setSortColumn] = useState<'name' | 'quantity' | 'unit'>('name')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [searchTerm, setSearchTerm] = useState(paginationState?.search || '')
+  const [sortColumn, setSortColumn] = useState<'name' | 'quantity' | 'unit'>((paginationState?.sortBy as any) || 'name')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(paginationState?.sortDirection || 'asc')
   const [unitFilter, setUnitFilter] = useState<string>('all')
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set()) // For file grouping
+  
+  // Use server-side search if pagination callbacks are available
+  const useServerSideSearch = !!onPaginationChange
+  
+  // Debounce search term to improve performance
+  const debouncedSearchTerm = useDebounce(searchTerm, 300)
+  
+  // Check if virtualization should be used
+  const shouldUseVirtualization = useMemo(() => {
+    if (enableVirtualization !== undefined) {
+      return enableVirtualization
+    }
+    
+    const threshold = virtualizationThreshold || 100
+    return data.length > threshold && !groupedByFile && !useServerSideSearch
+  }, [data.length, enableVirtualization, virtualizationThreshold, groupedByFile, useServerSideSearch])
+  
+  // Update server search when debounced term changes
+  useEffect(() => {
+    if (useServerSideSearch && onPaginationChange && debouncedSearchTerm !== paginationState?.search) {
+      onPaginationChange.setSearch(debouncedSearchTerm)
+    }
+  }, [debouncedSearchTerm, useServerSideSearch, onPaginationChange, paginationState?.search])
 
   // Group data by file if requested
   const groupedData = useMemo(() => {
@@ -117,8 +182,8 @@ export function DataTable({
     if (groupedByFile) return []; // Not used in grouped view
     
     let filtered = data.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.itemId && item.itemId.toLowerCase().includes(searchTerm.toLowerCase()))
+      const matchesSearch = item.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        (item.itemId && item.itemId.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
       const matchesUnit = unitFilter === 'all' || item.unit === unitFilter
       return matchesSearch && matchesUnit
     })
@@ -158,15 +223,19 @@ export function DataTable({
     })
 
     return filtered
-  }, [data, searchTerm, sortColumn, sortDirection, unitFilter, groupedByFile])
+  }, [data, debouncedSearchTerm, sortColumn, sortDirection, unitFilter, groupedByFile])
 
 
-    const handleSort = (column: 'name' | 'quantity' | 'unit') => {
-    if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+  const handleSort = (column: 'name' | 'quantity' | 'unit') => {
+    const newDirection = sortColumn === column ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'
+    
+    if (useServerSideSearch && onPaginationChange) {
+      // Use server-side sorting
+      onPaginationChange.setSorting(column, newDirection)
     } else {
+      // Use client-side sorting
       setSortColumn(column)
-      setSortDirection('asc')
+      setSortDirection(newDirection)
     }
   }
 
@@ -241,7 +310,13 @@ export function DataTable({
               >
                 <div className="flex items-center gap-3">
                   {/* Color indicator circle */}
-                  <div className={`w-4 h-4 rounded-full ${getFileBackgroundColor(fileId)} border-2 border-white shadow`}></div>
+                  <div 
+                    className="w-4 h-4 rounded-full border-2 shadow"
+                    style={{
+                      ...getFileInlineStyle(fileId),
+                      borderColor: '#ffffff'
+                    }}
+                  ></div>
                   <FileSpreadsheet className="w-5 h-5 text-blue-500" />
                   <div>
                     <h3 className="font-medium">{fileName}</h3>
@@ -583,7 +658,13 @@ export function DataTable({
                           <Badge key={`${item.id}-file-${fileId}-${index}`} variant="outline" className="text-xs block" title={getFileName(fileId)}>
                             <div className="flex items-center gap-1">
                               {/* Color indicator circle */}
-                              <div className={`w-3 h-3 rounded-full border border-white ${getFileBackgroundColor(fileId)}`}></div>
+                              <div 
+                                className="w-3 h-3 rounded-full border"
+                                style={{
+                                  ...getFileInlineStyle(fileId),
+                                  borderColor: '#ffffff'
+                                }}
+                              ></div>
                               <FileSpreadsheet className="w-3 h-3" />
                               <span className="truncate">{abbreviateFileName(getFileName(fileId), 15)}</span>
                             </div>
@@ -599,7 +680,13 @@ export function DataTable({
                       <Badge variant="outline" className="text-xs" title={getFileName(item.fileId)}>
                         <div className="flex items-center gap-1">
                           {/* Color indicator circle */}
-                          <div className={`w-3 h-3 rounded-full border border-white ${getFileBackgroundColor(item.fileId)}`}></div>
+                          <div 
+                            className="w-3 h-3 rounded-full border"
+                            style={{
+                              ...getFileInlineStyle(item.fileId),
+                              borderColor: '#ffffff'
+                            }}
+                          ></div>
                           <FileSpreadsheet className="w-3 h-3" />
                           <span className="truncate">{abbreviateFileName(getFileName(item.fileId), 15)}</span>
                         </div>
@@ -727,17 +814,100 @@ export function DataTable({
       </div>
 
       {/* Table */}
-      {groupedByFile ? renderGroupedTable() : renderRegularTable()}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <span className="ml-2 text-muted-foreground">Ładowanie danych...</span>
+        </div>
+      ) : groupedByFile ? (
+        renderGroupedTable()
+      ) : shouldUseVirtualization ? (
+        <VirtualizedDataTable
+          data={filteredAndSortedData}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          showAggregated={showAggregated}
+          uploadedFiles={uploadedFiles}
+          onStartInlineEdit={onStartInlineEdit}
+          onCancelInlineEdit={onCancelInlineEdit}
+          onSaveInlineEdit={onSaveInlineEdit}
+          inlineEditingItem={inlineEditingItem}
+          inlineEditValue={inlineEditValue}
+          onInlineEditValueChange={onInlineEditValueChange}
+        />
+      ) : (
+        renderRegularTable()
+      )}
 
-      {/* Summary */}
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>
-          Wyświetlono {groupedByFile ? data.length : filteredAndSortedData.length} z {data.length} elementów
-        </span>
-        <span>
-          Łącznie unikalnych elementów: {uniqueUnits.length}
-        </span>
-      </div>
+      {/* Pagination */}
+      {paginationMeta && onPaginationChange && !groupedByFile && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Wyświetlono {((paginationMeta.page - 1) * paginationMeta.limit) + 1} - {Math.min(paginationMeta.page * paginationMeta.limit, paginationMeta.total)} z {paginationMeta.total} elementów
+          </div>
+          
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious 
+                  onClick={() => paginationMeta.hasPrev && onPaginationChange.setPage(paginationMeta.page - 1)}
+                  className={!paginationMeta.hasPrev ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+              
+              {/* Page numbers */}
+              {Array.from({ length: Math.min(5, paginationMeta.totalPages) }, (_, i) => {
+                const pageNumber = Math.max(1, paginationMeta.page - 2) + i
+                if (pageNumber > paginationMeta.totalPages) return null
+                
+                return (
+                  <PaginationItem key={pageNumber}>
+                    <PaginationLink
+                      onClick={() => onPaginationChange.setPage(pageNumber)}
+                      isActive={pageNumber === paginationMeta.page}
+                      className="cursor-pointer"
+                    >
+                      {pageNumber}
+                    </PaginationLink>
+                  </PaginationItem>
+                )
+              })}
+              
+              <PaginationItem>
+                <PaginationNext 
+                  onClick={() => paginationMeta.hasNext && onPaginationChange.setPage(paginationMeta.page + 1)}
+                  className={!paginationMeta.hasNext ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+          
+          {/* Items per page selector */}
+          <Select value={paginationMeta.limit.toString()} onValueChange={(value) => onPaginationChange.setLimit(parseInt(value))}>
+            <SelectTrigger className="w-[100px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="25">25</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Summary for non-paginated views */}
+      {!paginationMeta && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Wyświetlono {groupedByFile ? data.length : filteredAndSortedData.length} z {data.length} elementów
+          </span>
+          <span>
+            Łącznie unikalnych elementów: {uniqueUnits.length}
+          </span>
+        </div>
+      )}
     </div>
   )
 }

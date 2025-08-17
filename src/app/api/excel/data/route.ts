@@ -5,12 +5,27 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const includeRaw = searchParams.get('includeRaw') === 'true'
+    const rawOnly = searchParams.get('rawOnly') === 'true'
     const fileId = searchParams.get('fileId')
-
-    // Get aggregated data with source file information
-    let aggregatedData;
     
-    if (fileId) {
+    // Pagination parameters
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const offset = (page - 1) * limit
+    
+    // Search parameters
+    const search = searchParams.get('search') || ''
+    const sortBy = searchParams.get('sortBy') || 'name'
+    const sortDirection = searchParams.get('sortDirection') || 'asc'
+
+    // Get aggregated data with source file information (skip if rawOnly)
+    let aggregatedData = [];
+    let paginationMeta: any = null;
+    
+    if (rawOnly) {
+      // Skip aggregated data when rawOnly is true
+      aggregatedData = [];
+    } else if (fileId) {
       // When filtering by file, find aggregated items that include this file in their sourceFiles
       const allAggregatedData = await db.aggregatedItem.findMany({
         include: {
@@ -41,8 +56,23 @@ export async function GET(request: NextRequest) {
         return item.fileId === fileId; // Fallback to direct fileId match
       });
     } else {
+      // Build where clause for search
+      const whereClause: any = {}
+      if (search) {
+        whereClause.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { itemId: { contains: search, mode: 'insensitive' } }
+        ]
+      }
+
+      // Get total count for pagination
+      const totalCount = await db.aggregatedItem.count({
+        where: whereClause
+      })
+
       // Get all aggregated data when no file filter is specified
       aggregatedData = await db.aggregatedItem.findMany({
+        where: whereClause,
         include: {
           file: {
             select: {
@@ -51,11 +81,22 @@ export async function GET(request: NextRequest) {
             }
           }
         },
-        orderBy: [
-          { name: 'asc' },
-          { unit: 'asc' }
-        ]
-      });
+        orderBy: {
+          [sortBy]: sortDirection as 'asc' | 'desc'
+        },
+        skip: offset,
+        take: limit
+      })
+
+      // Add pagination metadata to response
+      paginationMeta = {
+        page,
+        limit,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+        hasNext: page < Math.ceil(totalCount / limit),
+        hasPrev: page > 1
+      }
     }
 
     // Get source files for each aggregated item
@@ -95,26 +136,92 @@ export async function GET(request: NextRequest) {
 
     let rawData: any[] = []
     if (includeRaw) {
-      rawData = await db.excelRow.findMany({
-        where: fileId ? { fileId: fileId } : {},
-        include: {
-          file: {
-            select: {
-              fileName: true,
-              uploadDate: true
-            }
+      // Build where clause for raw data
+      const rawWhereClause: any = fileId ? { fileId: fileId } : {}
+      
+      // Add search functionality for raw data
+      if (search && fileId) {
+        rawWhereClause.AND = [
+          { fileId: fileId },
+          {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { itemId: { contains: search, mode: 'insensitive' } }
+            ]
           }
-        },
-        orderBy: {
-          createdAt: 'desc'
+        ]
+      }
+      
+      // Add search functionality for raw data when not filtered by file
+      if (search && !fileId) {
+        rawWhereClause.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { itemId: { contains: search, mode: 'insensitive' } }
+        ]
+      }
+      
+      // If we're viewing a specific file or rawOnly mode, add pagination for raw data
+      if (fileId || rawOnly) {
+        // Get total count for file raw data
+        const rawTotalCount = await db.excelRow.count({
+          where: rawWhereClause
+        })
+        
+        rawData = await db.excelRow.findMany({
+          where: rawWhereClause,
+          include: {
+            file: {
+              select: {
+                fileName: true,
+                uploadDate: true
+              }
+            }
+          },
+          orderBy: {
+            [sortBy === 'quantity' ? 'quantity' : sortBy === 'unit' ? 'unit' : 'name']: sortDirection as 'asc' | 'desc'
+          },
+          skip: offset,
+          take: limit
+        })
+        
+        // Update pagination metadata for raw data when viewing a file or in rawOnly mode
+        paginationMeta = {
+          page,
+          limit,
+          total: rawTotalCount,
+          totalPages: Math.ceil(rawTotalCount / limit),
+          hasNext: page * limit < rawTotalCount,
+          hasPrev: page > 1
         }
-      })
+      } else {
+        rawData = await db.excelRow.findMany({
+          where: rawWhereClause,
+          include: {
+            file: {
+              select: {
+                fileName: true,
+                uploadDate: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        })
+      }
     }
 
-    return NextResponse.json({
+    const response: any = {
       aggregated: aggregatedWithSourceFiles,
       raw: rawData
-    })
+    }
+
+    // Add pagination metadata if available
+    if (paginationMeta) {
+      response.pagination = paginationMeta
+    }
+
+    return NextResponse.json(response)
 
   } catch (error) {
     console.error('Error fetching data:', error)

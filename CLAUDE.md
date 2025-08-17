@@ -89,11 +89,26 @@ The application uses a **custom server** (`server.ts`) that combines Next.js wit
 
 ## Excel Processing Logic
 
-1. **File Upload:** XLSX parsing with automatic column detection
-2. **Data Extraction:** Supports formats with/without ID column (ID, Name, Quantity, Unit)
-3. **Aggregation:** Groups items by (itemId, name, unit) and sums quantities
-4. **Database Storage:** Saves both raw rows and aggregated items
-5. **Unit Conversion:** Automatic display optimization (e.g., 1000g → 1kg)
+1. **File Upload:** XLSX parsing with metadata-based structure preservation
+2. **Data Extraction:** Supports category headers (DODANE DO SPISU, PÓŁPRODUKTY, SUROWCE, PRODUKCJA) and data rows
+3. **Structure Preservation:** Stores original file structure in `originalStructure` JSON field
+4. **Aggregation:** Global aggregation across all files during export, preserving original format
+5. **Database Storage:** Saves raw rows with original indices and aggregated items
+6. **Unit Conversion:** Automatic display optimization (e.g., 1000g → 1kg)
+
+## Recent Major Changes (2025-08-16)
+
+### Metadata-Based Export System
+- **Problem Solved:** Excel exports now perfectly recreate original file format with categories
+- **Implementation:** Uses `originalStructure` JSON field to store exact file layout
+- **Export Logic:** Global aggregation during export rather than upload-time aggregation
+- **Categories:** Hidden from UI but preserved in export for format recreation
+
+### UI Cleanup
+- **Removed:** Aggregation indicator badges ("Zagregowane z X plików")
+- **Removed:** Bulk edit functionality and associated buttons
+- **Kept:** Individual item editing and deletion capabilities
+- **Export:** Maintained export functionality for both aggregated and raw data
 
 ## Socket.IO Integration
 
