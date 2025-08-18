@@ -60,16 +60,10 @@ export default function ComparisonPage() {
 
   const loadData = async () => {
     try {
-      console.log('loadData: Fetching from API...')
       const response = await fetch('/api/excel/data?includeRaw=true')
       if (response.ok) {
         const data = await response.json()
-        console.log('loadData: Received data:', {
-          aggregatedCount: data.aggregated?.length || 0,
-          firstAggregated: data.aggregated?.[0]?.name || 'none'
-        })
         setAggregatedData(data.aggregated || [])
-        console.log('✅ loadData: State updated')
       } else {
         console.error('Failed to load data:', response.status)
       }

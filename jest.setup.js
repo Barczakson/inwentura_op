@@ -88,7 +88,7 @@ global.fetch = jest.fn()
 // Mock console methods to reduce noise in tests
 global.console = {
   ...console,
-  // log: jest.fn(), // Temporarily enable log for debugging
+  log: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
 }

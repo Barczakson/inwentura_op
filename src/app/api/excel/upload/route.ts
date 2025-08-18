@@ -13,33 +13,22 @@ const ALLOWED_MIME_TYPES = [
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('File upload POST called')
     const formData = await request.formData()
-    console.log('FormData received')
     const file = formData.get('file') as File
-    console.log('File extracted from FormData:', file ? 'found' : 'not found')
 
     if (!file) {
-      console.log('No file uploaded')
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
     }
-    console.log('File details:', {
-      name: file.name,
-      size: file.size,
-      type: file.type
-    })
 
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       const errorMsg = `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB, but received ${(file.size / 1024 / 1024).toFixed(2)}MB`
-      console.log(errorMsg)
       return NextResponse.json({ error: errorMsg }, { status: 400 })
     }
 
     // Validate file type
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
       const errorMsg = `Invalid file type. Please upload an Excel file (.xlsx or .xls)`
-      console.log(`Invalid file type: ${file.type}`, errorMsg)
       return NextResponse.json({ error: errorMsg }, { status: 400 })
     }
 
@@ -47,27 +36,21 @@ export async function POST(request: NextRequest) {
     const fileName = file.name.toLowerCase()
     if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
       const errorMsg = 'Invalid file extension. Only .xlsx and .ls files are allowed.'
-      console.log(`Invalid file extension: ${fileName}`, errorMsg)
       return NextResponse.json({ error: errorMsg }, { status: 400 })
     }
 
     // Check for suspiciously small files
     if (file.size < 100) {
       const errorMsg = 'File is too small to be a valid Excel file.'
-      console.log(errorMsg)
       return NextResponse.json({ error: errorMsg }, { status: 400 })
     }
-    console.log('File validation passed')
 
     // Read the file with error recovery
     const buffer = Buffer.from(await file.arrayBuffer())
-    console.log('File buffer created, length:', buffer.length)
     let workbook: XLSX.WorkBook
     
     try {
-      console.log('Attempting to read Excel file')
       workbook = XLSX.read(buffer, { type: 'buffer' })
-      console.log('Excel file read successfully')
     } catch (xlsxError) {
       console.warn('XLSX read failed, attempting recovery:', xlsxError)
       
@@ -79,7 +62,6 @@ export async function POST(request: NextRequest) {
           cellNF: false,
           cellDates: true
         })
-        console.log('File recovered with alternative settings')
       } catch (recoveryError) {
         console.error('File recovery failed:', recoveryError)
         return NextResponse.json({ 
@@ -89,35 +71,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate workbook structure
-    console.log('Workbook structure:', {
-      sheetNames: workbook.SheetNames,
-      hasSheets: !!workbook.Sheets,
-      sheetCount: workbook.SheetNames?.length || 0
-    })
     if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
       const errorMsg = 'Excel file contains no sheets or is corrupted.'
-      console.log(errorMsg)
       return NextResponse.json({ error: errorMsg }, { status: 400 })
     }
 
     // Get the first sheet
     const sheetName = workbook.SheetNames[0]
-    console.log('Using sheet:', sheetName)
     const worksheet = workbook.Sheets[sheetName]
-    console.log('Worksheet exists:', !!worksheet)
 
     // Convert to JSON
-    console.log('Converting sheet to JSON with header:1 option')
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
-    console.log('JSON data converted, row count:', jsonData.length)
-    console.log('Sample data:', jsonData.slice(0, 3))
 
     // Process the data and build structure metadata
     const rows: any[] = []
     const structure: any[] = []
     const aggregatedData = new Map()
-    
-    console.log('Processing Excel file with', jsonData.length, 'rows')
 
     // Process each row and capture structure
     for (let i = 0; i < jsonData.length; i++) {
@@ -144,7 +113,6 @@ export async function POST(request: NextRequest) {
           originalRowIndex: i,
           excelRow: i + 1 // Excel is 1-indexed
         })
-        console.log(`Found header at row ${i + 1}: ${firstCell}`)
         continue
       }
 
@@ -201,8 +169,6 @@ export async function POST(request: NextRequest) {
               sourceRowIds: [rowId]
             })
           }
-          
-          console.log(`Found item at row ${i + 1}: ${name} (${quantity} ${unit})`)
         }
       }
     }
@@ -298,8 +264,6 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-
-    console.log(`Successfully processed ${rows.length} items with ${structure.length} structure elements`)
 
     return NextResponse.json({
       success: true,

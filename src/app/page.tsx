@@ -797,11 +797,6 @@ export default function Home() {
               : 'Prześlij pliki Excel, aby zarządzać i agregować dane automatycznie'
             }
           </p>
-          <div className="flex justify-center gap-4 text-sm text-muted-foreground">
-            <span>Zagregowane: {isMounted ? aggregatedData.length : '...'}</span>
-            <span>Surowe: {isMounted ? excelData.length : '...'}</span>
-            <span>Pliki: {isMounted ? uploadedFiles.length : '...'}</span>
-          </div>
         </div>
 
         {/* Column Mapping Dialog */}

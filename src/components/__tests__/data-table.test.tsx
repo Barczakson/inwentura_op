@@ -85,11 +85,7 @@ describe('DataTable Component', () => {
     // Look for buttons by querying all buttons and filtering
     const allButtons = screen.getAllByRole('button')
     
-    // Debug: log button content
-    console.log('All buttons found:', allButtons.length)
-    allButtons.forEach((button, index) => {
-      console.log(`Button ${index}:`, button.innerHTML)
-    })
+    // Check for action buttons by filtering buttons
     
     const editButtons = allButtons.filter(button => button.innerHTML.includes('Edit') || button.querySelector('svg'))
     const deleteButtons = allButtons.filter(button => button.innerHTML.includes('Trash') || button.innerHTML.includes('trash'))
