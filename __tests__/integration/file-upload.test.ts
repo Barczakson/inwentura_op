@@ -35,7 +35,32 @@ jest.mock('@/lib/db', () => {
           mockData.rows.push(...data.data.map((row: any) => ({ id: `row-${Date.now()}`, ...row })))
           return Promise.resolve({ count: data.data.length })
         }),
-        findMany: jest.fn().mockImplementation(() => Promise.resolve(mockData.rows)),
+        findMany: jest.fn().mockImplementation((query) => {
+          let filteredRows = mockData.rows
+          
+          // Apply where clause filtering if provided
+          if (query?.where) {
+            filteredRows = mockData.rows.filter(row => {
+              if (query.where.name && row.name !== query.where.name) return false
+              if (query.where.unit && row.unit !== query.where.unit) return false
+              if (query.where.itemId !== undefined && row.itemId !== query.where.itemId) return false
+              return true
+            })
+          }
+          
+          // Apply select if provided
+          if (query?.select) {
+            filteredRows = filteredRows.map(row => {
+              const selectedRow: any = {}
+              Object.keys(query.select).forEach(key => {
+                if (query.select[key]) selectedRow[key] = row[key]
+              })
+              return selectedRow
+            })
+          }
+          
+          return Promise.resolve(filteredRows)
+        }),
       },
       aggregatedItem: {
         create: jest.fn().mockImplementation((data) => {
@@ -48,7 +73,14 @@ jest.mock('@/lib/db', () => {
           mockData.aggregated.push(...items)
           return Promise.resolve({ count: items.length })
         }),
-        findMany: jest.fn().mockImplementation(() => Promise.resolve(mockData.aggregated)),
+        findMany: jest.fn().mockImplementation(() => {
+          // Return aggregated items with file relationship included
+          return Promise.resolve(mockData.aggregated.map(item => ({
+            ...item,
+            file: mockData.files.find(f => f.id === item.fileId) || null
+          })))
+        }),
+        count: jest.fn().mockImplementation(() => Promise.resolve(mockData.aggregated.length)),
         findUnique: jest.fn().mockImplementation(() => Promise.resolve(null)),
         update: jest.fn().mockImplementation((data) => {
           const index = mockData.aggregated.findIndex(item => 

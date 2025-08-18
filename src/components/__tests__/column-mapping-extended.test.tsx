@@ -3,16 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { ColumnMapping } from '@/components/column-mapping'
 import * as XLSX from 'xlsx'
 
-// Mock XLSX with dynamic import support
+// Mock XLSX
 jest.mock('xlsx', () => ({
-  read: jest.fn(),
-  utils: {
-    sheet_to_json: jest.fn(),
-  },
-}))
-
-// Mock dynamic import of xlsx
-jest.doMock('xlsx', () => Promise.resolve({
   read: jest.fn(),
   utils: {
     sheet_to_json: jest.fn(),
@@ -21,9 +13,12 @@ jest.doMock('xlsx', () => Promise.resolve({
 
 const mockXLSX = XLSX as jest.Mocked<typeof XLSX>
 
-const mockFile = new File(['test content'], 'test.xlsx', {
+// Mock file with proper arrayBuffer method
+const mockFile = {
+  name: 'test.xlsx',
   type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-})
+  arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(8))
+} as unknown as File
 
 const mockOnMappingComplete = jest.fn()
 const mockOnCancel = jest.fn()

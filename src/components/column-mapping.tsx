@@ -21,6 +21,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Info } from 'lucide-react'
+import * as XLSX from 'xlsx'
 
 interface ColumnMappingProps {
   file: File
@@ -64,14 +65,14 @@ export function ColumnMapping({ file, onMappingComplete, onCancel }: ColumnMappi
       
       // Create a temporary URL for the file
       const arrayBuffer = await file.arrayBuffer()
-      const workbook = (await import('xlsx')).read(arrayBuffer, { type: 'array' })
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' })
       
       // Get the first sheet
       const sheetName = workbook.SheetNames[0]
       const worksheet = workbook.Sheets[sheetName]
       
       // Convert to JSON with header detection
-      const jsonData = (await import('xlsx')).utils.sheet_to_json(worksheet, { header: 1 })
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
       
       if (jsonData.length === 0) {
         throw new Error('Empty Excel file')
