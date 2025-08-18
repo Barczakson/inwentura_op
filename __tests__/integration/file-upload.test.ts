@@ -81,19 +81,16 @@ const mockXLSX = XLSX as jest.Mocked<typeof XLSX>
 describe('File Upload Integration Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    // Reset mock data
-    const prisma = require('@/lib/prisma').default
-    prisma.excelFile.create.mockClear()
-    prisma.excelRow.createMany.mockClear()
-    prisma.aggregatedItem.createMany.mockClear()
+    // Mock data will be cleared by jest.clearAllMocks() since we mock the entire module
   })
 
   it('should handle complete upload workflow', async () => {
-    // Mock Excel data
+    // Mock Excel data with correct column structure and headers
     const mockExcelData = [
-      { 'Nr indeksu': 'A001', 'Nazwa towaru': 'Produkt A', 'Ilosc': 10, 'Jednostka': 'kg' },
-      { 'Nr indeksu': 'A001', 'Nazwa towaru': 'Produkt A', 'Ilosc': 5, 'Jednostka': 'kg' },
-      { 'Nr indeksu': 'A002', 'Nazwa towaru': 'Produkt B', 'Ilosc': 3, 'Jednostka': 'l' },
+      ['L.p.', 'Nr indeksu', 'Nazwa towaru', 'Ilość', 'JMZ'], // Header row
+      [1, 'A001', 'Produkt A', 10, 'kg'],
+      [2, 'A001', 'Produkt A', 5, 'kg'],
+      [3, 'A002', 'Produkt B', 3, 'l'],
     ]
 
     mockXLSX.read.mockReturnValue({
@@ -104,18 +101,28 @@ describe('File Upload Integration Tests', () => {
     mockXLSX.utils.sheet_to_json.mockReturnValue(mockExcelData)
 
     // Step 1: Upload file
+    console.log('Creating FormData')
     const formData = new FormData()
-    const file = new File(['excel content'], 'test-integration.xlsx', {
+    // Create a larger mock file content to pass the size check
+    const largeFileContent = 'A'.repeat(150) // 150 bytes of content
+    const file = new File([largeFileContent], 'test-integration.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     formData.append('file', file)
+    console.log('FormData created')
 
+    console.log('Creating NextRequest')
     const uploadRequest = new NextRequest('http://localhost:3000/api/excel/upload', {
       method: 'POST',
       body: formData,
     })
+    console.log('NextRequest created')
 
+    console.log('Calling uploadPOST')
     const uploadResponse = await uploadPOST(uploadRequest)
+    console.log('uploadPOST completed, status:', uploadResponse.status)
+    // Remove this line: const uploadDataText = await uploadResponse.text()
+    // console.log('Response data:', uploadDataText)
     expect(uploadResponse.status).toBe(200)
 
     const uploadData = await uploadResponse.json()
@@ -142,7 +149,8 @@ describe('File Upload Integration Tests', () => {
   it('should handle multiple file uploads and maintain separate data', async () => {
     // First file
     const mockExcelData1 = [
-      { 'Nr indeksu': 'A001', 'Nazwa towaru': 'Produkt A', 'Ilosc': 10, 'Jednostka': 'kg' },
+      ['L.p.', 'Nr indeksu', 'Nazwa towaru', 'Ilość', 'JMZ'], // Header row
+      [1, 'A001', 'Produkt A', 10, 'kg'],
     ]
 
     mockXLSX.read.mockReturnValue({
@@ -153,7 +161,9 @@ describe('File Upload Integration Tests', () => {
     mockXLSX.utils.sheet_to_json.mockReturnValue(mockExcelData1)
 
     const formData1 = new FormData()
-    const file1 = new File(['excel content 1'], 'test1.xlsx', {
+    // Create a larger mock file content to pass the size check
+    const largeFileContent1 = 'B'.repeat(150) // 150 bytes of content
+    const file1 = new File([largeFileContent1], 'test1.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     formData1.append('file', file1)
@@ -168,13 +178,16 @@ describe('File Upload Integration Tests', () => {
 
     // Second file
     const mockExcelData2 = [
-      { 'Nr indeksu': 'B001', 'Nazwa towaru': 'Produkt B', 'Ilosc': 5, 'Jednostka': 'l' },
+      ['L.p.', 'Nr indeksu', 'Nazwa towaru', 'Ilość', 'JMZ'], // Header row
+      [1, 'B001', 'Produkt B', 5, 'l'],
     ]
     
     mockXLSX.utils.sheet_to_json.mockReturnValue(mockExcelData2)
 
     const formData2 = new FormData()
-    const file2 = new File(['excel content 2'], 'test2.xlsx', {
+    // Create a larger mock file content to pass the size check
+    const largeFileContent2 = 'C'.repeat(150) // 150 bytes of content
+    const file2 = new File([largeFileContent2], 'test2.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     formData2.append('file', file2)
@@ -199,8 +212,9 @@ describe('File Upload Integration Tests', () => {
   it('should handle files with different column structures', async () => {
     // File with different column names (without ID column)
     const mockExcelData = [
-      { 'Nazwa towaru': 'Produkt bez ID', 'Ilosc': 8, 'Jednostka': 'szt' },
-      { 'Nazwa towaru': 'Inny produkt', 'Ilosc': 12, 'Jednostka': 'kg' },
+      ['L.p.', 'Nr indeksu', 'Nazwa towaru', 'Ilość', 'JMZ'], // Header row
+      [1, null, 'Produkt bez ID', 8, 'szt'],
+      [2, null, 'Inny produkt', 12, 'kg'],
     ]
 
     mockXLSX.read.mockReturnValue({
@@ -211,7 +225,9 @@ describe('File Upload Integration Tests', () => {
     mockXLSX.utils.sheet_to_json.mockReturnValue(mockExcelData)
 
     const formData = new FormData()
-    const file = new File(['excel content'], 'no-id-columns.xlsx', {
+    // Create a larger mock file content to pass the size check
+    const largeFileContent = 'D'.repeat(150) // 150 bytes of content
+    const file = new File([largeFileContent], 'no-id-columns.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     formData.append('file', file)
@@ -236,15 +252,16 @@ describe('File Upload Integration Tests', () => {
   })
 
   it('should handle large files with many items', async () => {
-    // Generate large dataset
-    const mockExcelData = []
+    // Generate large dataset with correct structure
+    const mockExcelData = [['L.p.', 'Nr indeksu', 'Nazwa towaru', 'Ilość', 'JMZ']] // Header row
     for (let i = 1; i <= 100; i++) {
-      mockExcelData.push({
-        'Nr indeksu': `A${i.toString().padStart(3, '0')}`,
-        'Nazwa towaru': `Produkt ${i}`,
-        'Ilosc': Math.floor(Math.random() * 100) + 1,
-        'Jednostka': i % 2 === 0 ? 'kg' : 'l',
-      })
+      mockExcelData.push([
+        i, 
+        `A${i.toString().padStart(3, '0')}`,
+        `Produkt ${i}`,
+        Math.floor(Math.random() * 100) + 1,
+        i % 2 === 0 ? 'kg' : 'l'
+      ])
     }
 
     mockXLSX.read.mockReturnValue({
@@ -255,7 +272,9 @@ describe('File Upload Integration Tests', () => {
     mockXLSX.utils.sheet_to_json.mockReturnValue(mockExcelData)
 
     const formData = new FormData()
-    const file = new File(['large excel content'], 'large-file.xlsx', {
+    // Create a larger mock file content to pass the size check
+    const largeFileContent = 'E'.repeat(150) // 150 bytes of content
+    const file = new File([largeFileContent], 'large-file.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     formData.append('file', file)
@@ -279,10 +298,12 @@ describe('File Upload Integration Tests', () => {
       Sheets: { Sheet1: {} },
     } as any)
     
-    mockXLSX.utils.sheet_to_json.mockReturnValue([])
+    mockXLSX.utils.sheet_to_json.mockReturnValue([['L.p.', 'Nr indeksu', 'Nazwa towaru', 'Ilość', 'JMZ']]) // Just header row
 
     const formData = new FormData()
-    const file = new File(['empty excel'], 'empty.xlsx', {
+    // Create a larger mock file content to pass the size check
+    const largeFileContent = 'F'.repeat(150) // 150 bytes of content
+    const file = new File([largeFileContent], 'empty.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     formData.append('file', file)

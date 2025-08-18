@@ -129,19 +129,124 @@ export function getBestDisplayUnit(quantity: number, unit: string): string {
  * Format a quantity with the most appropriate unit
  */
 export function formatQuantityWithConversion(quantity: number, unit: string, precision: number = 2): string {
+  // Handle special cases for certain units
+  const normalizedUnit = unit.toLowerCase();
+  
   try {
-    const bestUnit = getBestDisplayUnit(quantity, unit)
-    
-    if (bestUnit !== unit) {
-      const convertedQuantity = convertUnit(quantity, unit, bestUnit)
-      return `${convertedQuantity.toFixed(precision)} ${bestUnit}`
+    // Special handling for weight units
+    if (['g', 'mg', 'kg', 'oz', 'lb', 'gram', 'milligram', 'kilogram'].includes(normalizedUnit)) {
+      // Handle aliases first
+      let baseUnit = normalizedUnit;
+      if (normalizedUnit === 'gram') baseUnit = 'g';
+      if (normalizedUnit === 'milligram') baseUnit = 'mg';
+      if (normalizedUnit === 'kilogram') baseUnit = 'kg';
+      
+      // For grams, convert to kg when >= 1000g (or <= -1000g for negative numbers)
+      if (baseUnit === 'g' && (quantity >= 1000 || quantity <= -1000)) {
+        const converted = quantity / 1000;
+        return formatConvertedNumber(converted, precision) + ' kg';
+      }
+      
+      // For milligrams, convert to grams when >= 1000mg (or <= -1000mg for negative numbers)
+      if (baseUnit === 'mg' && (quantity >= 1000 || quantity <= -1000)) {
+        const converted = quantity / 1000;
+        return formatConvertedNumber(converted, precision) + ' g';
+      }
+      
+      // For kilograms, don't convert (keep as is)
+      if (baseUnit === 'kg') {
+        return formatNonConvertedNumber(quantity, precision) + ' kg';
+      }
+      
+      // For grams and milligrams (when not converted)
+      if (baseUnit === 'g' || baseUnit === 'mg') {
+        return formatNonConvertedNumber(quantity, precision) + ' ' + baseUnit;
+      }
+      
+      // For other weight units, keep as is
+      return formatNonConvertedNumber(quantity, precision) + ' ' + baseUnit;
     }
     
-    return `${quantity} ${unit}`
+    // Special handling for volume units
+    if (['l', 'ml', 'fl oz', 'gal', 'cup', 'milliliter', 'liter'].includes(normalizedUnit)) {
+      // Handle aliases first
+      let baseUnit = normalizedUnit;
+      if (normalizedUnit === 'milliliter') baseUnit = 'ml';
+      if (normalizedUnit === 'liter') baseUnit = 'l';
+      
+      // For milliliters, convert to liters when >= 1000ml (or <= -1000ml for negative numbers)
+      if (baseUnit === 'ml' && (quantity >= 1000 || quantity <= -1000)) {
+        const converted = quantity / 1000;
+        return formatConvertedNumber(converted, precision) + ' l';
+      }
+      
+      // For liters, don't convert (keep as is)
+      if (baseUnit === 'l') {
+        return formatNonConvertedNumber(quantity, precision) + ' l';
+      }
+      
+      // For ml (when not converted)
+      if (baseUnit === 'ml') {
+        return formatNonConvertedNumber(quantity, precision) + ' ml';
+      }
+      
+      // For other volume units, keep as is
+      return formatNonConvertedNumber(quantity, precision) + ' ' + baseUnit;
+    }
+    
+    // For other units, return as is with default formatting
+    return formatNonConvertedNumber(quantity, precision) + ' ' + unit;
   } catch (error) {
     // Fallback to original formatting if conversion fails
-    return `${quantity} ${unit}`
+    return formatNonConvertedNumber(quantity, precision) + ' ' + unit;
   }
+}
+
+/**
+ * Format number for converted values - always use specified precision with trailing zeros
+ */
+function formatConvertedNumber(num: number, precision: number): string {
+  return num.toFixed(precision);
+}
+
+/**
+ * Format number for non-converted values - use minimal necessary precision
+ */
+function formatNonConvertedNumber(num: number, maxPrecision: number): string {
+  // For integers, don't add decimal places
+  if (Number.isInteger(num)) {
+    return num.toString();
+  }
+  
+  // For decimals, determine the minimum precision needed
+  // Convert to string and analyze
+  const str = num.toString();
+  
+  // If it's in scientific notation, convert to fixed
+  if (str.includes('e')) {
+    return num.toFixed(maxPrecision);
+  }
+  
+  // If it has a decimal point already, preserve its precision
+  if (str.includes('.')) {
+    const decimalPart = str.split('.')[1];
+    // Limit to maxPrecision but don't add unnecessary zeros
+    if (decimalPart.length <= maxPrecision) {
+      // Remove trailing zeros
+      let result = str;
+      if (result.includes('.')) {
+        result = result.replace(/\\.?0+$/, '');
+      }
+      return result;
+    }
+  }
+  
+  // Fallback - use toFixed but remove trailing zeros
+  let formatted = num.toFixed(maxPrecision);
+  if (formatted.includes('.')) {
+    formatted = formatted.replace(/\\.?0+$/, '');
+  }
+  return formatted;
 }
 
 /**

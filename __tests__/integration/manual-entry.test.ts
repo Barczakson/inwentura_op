@@ -18,6 +18,7 @@ jest.mock('@/lib/db', () => {
     db: {
       aggregatedItem: {
         findMany: jest.fn().mockImplementation(() => Promise.resolve(mockData.aggregated)),
+        count: jest.fn().mockImplementation(() => Promise.resolve(mockData.aggregated.length)),
         upsert: jest.fn().mockImplementation((data) => {
           // Check if item exists
           const existingIndex = mockData.aggregated.findIndex(item => 
@@ -52,6 +53,7 @@ jest.mock('@/lib/db', () => {
       },
       excelRow: {
         findMany: jest.fn().mockImplementation(() => Promise.resolve([])),
+        count: jest.fn().mockImplementation(() => Promise.resolve(0)),
       },
     },
   }
@@ -66,14 +68,45 @@ describe('Manual Entry Integration Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     // Reset mock data
-    const prisma = require('@/lib/db').db
-    prisma.aggregatedItem.findMany.mockClear()
-    prisma.aggregatedItem.upsert.mockClear()
-    prisma.excelRow.findMany.mockClear()
+    const mockData = [] as any[]
     
-    // Reset mock data array
-    const mockData = require('@/lib/db').db.aggregatedItem.findMany.mock.results[0]?.value || []
-    mockData.length = 0
+    const prisma = require('@/lib/db').db
+    prisma.aggregatedItem.findMany.mockImplementation(() => Promise.resolve(mockData))
+    prisma.aggregatedItem.count.mockImplementation(() => Promise.resolve(mockData.length))
+    prisma.aggregatedItem.upsert.mockImplementation((data) => {
+      // Check if item exists
+      const existingIndex = mockData.findIndex(item => 
+        item.itemId === data.where.itemId_name_unit.itemId &&
+        item.name === data.where.itemId_name_unit.name &&
+        item.unit === data.where.itemId_name_unit.unit
+      )
+      
+      if (existingIndex >= 0) {
+        // Update existing item
+        mockData[existingIndex] = {
+          ...mockData[existingIndex],
+          quantity: mockData[existingIndex].quantity + data.update.quantity.increment,
+          count: (mockData[existingIndex].count || 1) + 1
+        }
+        return Promise.resolve(mockData[existingIndex])
+      } else {
+        // Create new item
+        const newItem = {
+          id: data.create.id || `item-${Date.now()}`,
+          itemId: data.create.itemId,
+          name: data.create.name,
+          quantity: data.create.quantity,
+          unit: data.create.unit,
+          count: data.create.count || 1,
+          sourceFiles: data.create.sourceFiles || '[]',
+        }
+        mockData.push(newItem)
+        return Promise.resolve(newItem)
+      }
+    })
+    
+    prisma.excelRow.findMany.mockImplementation(() => Promise.resolve([]))
+    prisma.excelRow.count.mockImplementation(() => Promise.resolve(0))
   })
 
   it('should add a manual entry and retrieve it', async () => {

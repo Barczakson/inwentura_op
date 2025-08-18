@@ -93,7 +93,7 @@ describe('Colors Utility Functions', () => {
       const fileName = 'very-long-file-name-that-exceeds-the-maximum-length.txt'
       const abbreviated = abbreviateFileName(fileName, 20)
       
-      expect(abbreviated).toBe('very-long-file-n...')
+      expect(abbreviated).toBe('very-long-file-na...')
       expect(abbreviated.length).toBe(20)
     })
 
@@ -120,10 +120,10 @@ describe('Colors Utility Functions', () => {
     })
 
     it('should handle fileName just over maxLength', () => {
-      const fileName = 'exactly-21-chars.txt'
+      const fileName = 'exactly-21-chars.txts' // 21 characters now  
       const abbreviated = abbreviateFileName(fileName, 20)
       
-      expect(abbreviated).toBe('exactly-21-chars...')
+      expect(abbreviated).toBe('exactly-21-chars....')
     })
   })
 })

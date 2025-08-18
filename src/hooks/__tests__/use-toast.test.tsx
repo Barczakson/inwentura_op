@@ -54,19 +54,17 @@ describe('useToast Hook', () => {
 
     act(() => {
       toast({ title: 'Toast 1' })
-      toast({ title: 'Toast 2' })
+      // Due to TOAST_LIMIT = 1, only one toast can exist at a time
     })
 
-    expect(result.current.toasts).toHaveLength(2)
+    expect(result.current.toasts).toHaveLength(1)
     expect(result.current.toasts[0].open).toBe(true)
-    expect(result.current.toasts[1].open).toBe(true)
 
     act(() => {
       result.current.dismiss()
     })
 
     expect(result.current.toasts[0].open).toBe(false)
-    expect(result.current.toasts[1].open).toBe(false)
   })
 
   it('should remove a toast after timeout', () => {

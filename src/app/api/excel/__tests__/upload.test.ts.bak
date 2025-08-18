@@ -16,9 +16,6 @@ jest.mock('@/lib/db', () => ({
       createMany: jest.fn(),
     },
     aggregatedItem: {
-      findUnique: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
       createMany: jest.fn(),
     },
   },
@@ -44,11 +41,10 @@ describe('/api/excel/upload', () => {
   })
 
   it('should handle file upload successfully', async () => {
-    // Mock Excel file content - should be arrays since upload route uses { header: 1 }
+    // Mock Excel file content
     const mockExcelData = [
-      ['L.p.', 'Nr indeksu', 'Nazwa towaru', 'Ilosc', 'Jednostka'], // Header
-      [1, 'A001', 'Product A', 10, 'kg'],
-      [2, 'A002', 'Product B', 5, 'l'],
+      { 'Nr indeksu': 'A001', 'Nazwa towaru': 'Product A', 'Ilosc': 10, 'Jednostka': 'kg' },
+      { 'Nr indeksu': 'A002', 'Nazwa towaru': 'Product B', 'Ilosc': 5, 'Jednostka': 'l' },
     ]
 
     // Mock XLSX functions
@@ -59,7 +55,18 @@ describe('/api/excel/upload', () => {
       },
     } as any)
     
-    mockXLSX.utils.sheet_to_json.mockReturnValue(mockExcelData)
+    mockXLSX.utils.sheet_to_json.mockImplementation((worksheet, opts) => {
+      // Mock implementation that matches the actual call
+      if (opts && opts.header === 1) {
+        // Return data with headers as first row
+        return [
+          ["L.p.", "Nr indeksu", "Nazwa towaru", "Ilosc", "Jednostka"],
+          [1, "A001", "Product A", 10, "kg"],
+          [2, "A002", "Product B", 5, "l"]
+        ];
+      }
+      return mockExcelData;
+    });
 
     // Mock Prisma responses
     mockPrisma.excelFile.create.mockResolvedValue({
@@ -70,15 +77,11 @@ describe('/api/excel/upload', () => {
     } as any)
 
     mockPrisma.excelRow.createMany.mockResolvedValue({ count: 2 })
-    mockPrisma.aggregatedItem.findUnique.mockResolvedValue(null) // No existing items
-    mockPrisma.aggregatedItem.create.mockResolvedValue({ id: 'item-123' } as any)
     mockPrisma.aggregatedItem.createMany.mockResolvedValue({ count: 2 })
 
     // Create mock request with file
     const formData = new FormData()
-    // Create a file with minimum size requirement (>100 bytes)
-    const fileContent = 'x'.repeat(200) // 200 bytes to exceed minimum
-    const file = new File([fileContent], 'test.xlsx', {
+    const file = new File(['excel content'], 'test.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     formData.append('file', file)
@@ -88,16 +91,13 @@ describe('/api/excel/upload', () => {
       body: formData,
     })
 
-    const response = await POST(request)
-    const data = await response.json()
-
     expect(response.status).toBe(200)
     expect(data).toHaveProperty('fileId')
     expect(data).toHaveProperty('rows')
     expect(data).toHaveProperty('aggregated')
     expect(mockPrisma.excelFile.create).toHaveBeenCalled()
     expect(mockPrisma.excelRow.createMany).toHaveBeenCalled()
-    expect(mockPrisma.aggregatedItem.create).toHaveBeenCalled()
+    expect(mockPrisma.aggregatedItem.createMany).toHaveBeenCalled()
   })
 
   it('should return error when no file is provided', async () => {
@@ -137,8 +137,7 @@ describe('/api/excel/upload', () => {
     })
 
     const formData = new FormData()
-    const fileContent = 'x'.repeat(200) // 200 bytes to exceed minimum
-    const file = new File([fileContent], 'test.xlsx', {
+    const file = new File([new ArrayBuffer(150)], 'test.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     formData.append('file', file)
@@ -157,10 +156,9 @@ describe('/api/excel/upload', () => {
 
   it('should aggregate items correctly', async () => {
     const mockExcelData = [
-      ['L.p.', 'Nr indeksu', 'Nazwa towaru', 'Ilosc', 'Jednostka'], // Header
-      [1, 'A001', 'Product A', 10, 'kg'],
-      [2, 'A001', 'Product A', 5, 'kg'],
-      [3, 'A002', 'Product B', 3, 'l'],
+      { 'Nr indeksu': 'A001', 'Nazwa towaru': 'Product A', 'Ilosc': 10, 'Jednostka': 'kg' },
+      { 'Nr indeksu': 'A001', 'Nazwa towaru': 'Product A', 'Ilosc': 5, 'Jednostka': 'kg' },
+      { 'Nr indeksu': 'A002', 'Nazwa towaru': 'Product B', 'Ilosc': 3, 'Jednostka': 'l' },
     ]
 
     mockXLSX.read.mockReturnValue({
@@ -178,13 +176,10 @@ describe('/api/excel/upload', () => {
     } as any)
 
     mockPrisma.excelRow.createMany.mockResolvedValue({ count: 3 })
-    mockPrisma.aggregatedItem.findUnique.mockResolvedValue(null) // No existing items
-    mockPrisma.aggregatedItem.create.mockResolvedValue({ id: 'item-123' } as any)
     mockPrisma.aggregatedItem.createMany.mockResolvedValue({ count: 2 })
 
     const formData = new FormData()
-    const fileContent = 'x'.repeat(200) // 200 bytes to exceed minimum
-    const file = new File([fileContent], 'test.xlsx', {
+    const file = new File(['excel content'], 'test.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     formData.append('file', file)
@@ -198,17 +193,17 @@ describe('/api/excel/upload', () => {
     const data = await response.json()
 
     expect(response.status).toBe(200)
-    expect(data).toHaveProperty('fileId')
-    expect(data).toHaveProperty('rows')
-    expect(data).toHaveProperty('aggregated')
     
-    // Check that aggregated data is returned in response
-    expect(data.aggregated).toHaveLength(2) // Should have 2 unique items
-    expect(data.rows).toHaveLength(3) // Should have 3 raw rows
+    // Check aggregation logic - A001 should be aggregated to 15kg
+    const aggregatedCall = mockPrisma.aggregatedItem.createMany.mock.calls[0][0]
+    const aggregatedData = aggregatedCall.data as any[]
     
-    // Find aggregated Product A
-    const productA = data.aggregated.find(item => item.itemId === 'A001')
+    const productA = aggregatedData.find(item => item.itemId === 'A001')
     expect(productA).toBeDefined()
     expect(productA.quantity).toBe(15) // 10 + 5
+    
+    const productB = aggregatedData.find(item => item.itemId === 'A002')
+    expect(productB).toBeDefined()
+    expect(productB.quantity).toBe(3)
   })
 })

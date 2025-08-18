@@ -27,8 +27,8 @@ jest.mock('xlsx', () => ({
     book_append_sheet: jest.fn(),
     decode_range: jest.fn(),
     encode_cell: jest.fn(),
-    write: jest.fn(),
   },
+  write: jest.fn(), // This should be directly on XLSX, not utils
 }))
 
 import { db } from '@/lib/db'
@@ -40,13 +40,18 @@ describe('/api/excel/export', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     
-    // Mock XLSX functions
-    mockXLSX.utils.json_to_sheet.mockReturnValue({} as any)
-    mockXLSX.utils.book_new.mockReturnValue({} as any)
+    // Mock XLSX functions with simpler mocks that work with NextResponse
+    const mockWorksheet = {
+      '!ref': 'A1:E3',
+      A1: { v: 'Test' },
+    }
+    
+    mockXLSX.utils.json_to_sheet.mockReturnValue(mockWorksheet as any)
+    mockXLSX.utils.book_new.mockReturnValue({ Sheets: {}, SheetNames: [] } as any)
     mockXLSX.utils.book_append_sheet.mockReturnValue(undefined)
-    mockXLSX.utils.decode_range.mockReturnValue({ s: { r: 0 }, e: { r: 0 } })
+    mockXLSX.utils.decode_range.mockReturnValue({ s: { r: 0, c: 0 }, e: { r: 2, c: 4 } })
     mockXLSX.utils.encode_cell.mockReturnValue('A1')
-    mockXLSX.utils.write.mockReturnValue(Buffer.from('mock excel data'))
+    mockXLSX.write.mockReturnValue(Buffer.from('mock-excel-buffer')) // Use Buffer instead of Uint8Array
   })
 
   describe('GET aggregated data', () => {
@@ -76,8 +81,15 @@ describe('/api/excel/export', () => {
       mockPrisma.excelFile.findMany.mockResolvedValue(mockFiles)
 
       const request = new NextRequest('http://localhost:3000/api/excel/export?type=aggregated')
+      
       const response = await GET(request)
-
+      
+      // Debug the response if it's not 200
+      if (response.status !== 200) {
+        const errorBody = await response.json().catch(() => ({ error: 'Failed to parse error response' }))
+        console.error('Response error:', response.status, errorBody)
+      }
+      
       expect(response.status).toBe(200)
       expect(response.headers.get('Content-Type')).toBe(
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -88,7 +100,7 @@ describe('/api/excel/export', () => {
       expect(mockXLSX.utils.json_to_sheet).toHaveBeenCalled()
       expect(mockXLSX.utils.book_new).toHaveBeenCalled()
       expect(mockXLSX.utils.book_append_sheet).toHaveBeenCalled()
-      expect(mockXLSX.utils.write).toHaveBeenCalled()
+      expect(mockXLSX.write).toHaveBeenCalled()
     })
 
     it('should return error when no files are found', async () => {
@@ -145,7 +157,7 @@ describe('/api/excel/export', () => {
       expect(mockXLSX.utils.json_to_sheet).toHaveBeenCalled()
       expect(mockXLSX.utils.book_new).toHaveBeenCalled()
       expect(mockXLSX.utils.book_append_sheet).toHaveBeenCalled()
-      expect(mockXLSX.utils.write).toHaveBeenCalled()
+      expect(mockXLSX.write).toHaveBeenCalled()
     })
 
     it('should handle database errors gracefully', async () => {

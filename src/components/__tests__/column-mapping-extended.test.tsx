@@ -3,8 +3,16 @@ import userEvent from '@testing-library/user-event'
 import { ColumnMapping } from '@/components/column-mapping'
 import * as XLSX from 'xlsx'
 
-// Mock XLSX
+// Mock XLSX with dynamic import support
 jest.mock('xlsx', () => ({
+  read: jest.fn(),
+  utils: {
+    sheet_to_json: jest.fn(),
+  },
+}))
+
+// Mock dynamic import of xlsx
+jest.doMock('xlsx', () => Promise.resolve({
   read: jest.fn(),
   utils: {
     sheet_to_json: jest.fn(),

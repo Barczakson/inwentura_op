@@ -27,8 +27,8 @@ describe('Comparison Page', () => {
 
   it('renders the comparison page title', () => {
     render(<ComparisonPage />)
-    expect(screen.getByText('Porównanie Miesięczne Inwentarza')).toBeInTheDocument()
-    expect(screen.getByText(/Porównaj bieżący inwentarz z poprzednim miesiącem/)).toBeInTheDocument()
+    expect(screen.getAllByText('Porównanie Miesięczne Inwentarza')).toHaveLength(2) // Title appears in multiple places
+    expect(screen.getAllByText(/Porównaj bieżący inwentarz z poprzednim miesiącem/)).toHaveLength(2) // Description also appears in multiple places
   })
 
   it('renders back navigation link', () => {
@@ -96,20 +96,18 @@ describe('Comparison Page', () => {
     const user = userEvent.setup()
     render(<ComparisonPage />)
 
-    const fileInput = screen.getByRole('textbox', { hidden: true }) || 
-                     document.querySelector('input[type="file"]')
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    expect(fileInput).toBeInTheDocument()
     
-    if (fileInput) {
-      const file = new File(['excel content'], 'previous-month.xlsx', {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      })
+    const file = new File(['excel content'], 'previous-month.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
 
-      await user.upload(fileInput as HTMLInputElement, file)
+    await user.upload(fileInput, file)
 
-      await waitFor(() => {
-        expect(screen.getByText('Wybrano: previous-month.xlsx')).toBeInTheDocument()
-      })
-    }
+    await waitFor(() => {
+      expect(screen.getByText('Wybrano: previous-month.xlsx')).toBeInTheDocument()
+    })
   })
 
   it('disables comparison button when no previous month file', () => {

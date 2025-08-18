@@ -1,5 +1,8 @@
 import '@testing-library/jest-dom'
 
+// Load polyfills first
+import './jest.setup.polyfills'
+
 // Mock Next.js router
 jest.mock('next/router', () => ({
   useRouter: () => ({
@@ -85,7 +88,7 @@ global.fetch = jest.fn()
 // Mock console methods to reduce noise in tests
 global.console = {
   ...console,
-  log: jest.fn(),
+  // log: jest.fn(), // Temporarily enable log for debugging
   warn: jest.fn(),
   error: jest.fn(),
 }

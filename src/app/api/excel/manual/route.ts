@@ -30,6 +30,9 @@ export async function POST(request: NextRequest) {
       update: {
         quantity: {
           increment: quantity
+        },
+        count: {
+          increment: 1
         }
       },
       create: {
@@ -39,7 +42,7 @@ export async function POST(request: NextRequest) {
         quantity,
         unit: cleanUnit,
         sourceFiles: JSON.stringify([]), // Manual entries have no source files
-        count: 1 // Manual entries count as 1
+        count: 1 // First manual entry for this item
       }
     })
 
@@ -47,7 +50,6 @@ export async function POST(request: NextRequest) {
     const itemWithSourceInfo = {
       ...aggregatedItem,
       sourceFiles: [], // Manual entries have no source files
-      count: 1 // Manual entries count as 1
     }
 
     return NextResponse.json(itemWithSourceInfo)

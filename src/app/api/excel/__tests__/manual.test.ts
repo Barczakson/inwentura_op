@@ -46,7 +46,6 @@ describe('/api/excel/manual', () => {
       const expectedItem = {
         ...mockAggregatedItem,
         sourceFiles: [],
-        count: 1,
       }
 
       mockPrisma.aggregatedItem.upsert.mockResolvedValue(mockAggregatedItem)
@@ -80,6 +79,9 @@ describe('/api/excel/manual', () => {
           quantity: {
             increment: 10,
           },
+          count: {
+            increment: 1,
+          },
         },
         create: {
           id: 'mock-uuid',
@@ -107,7 +109,6 @@ describe('/api/excel/manual', () => {
       const expectedItem = {
         ...mockAggregatedItem,
         sourceFiles: [],
-        count: 1,
       }
 
       mockPrisma.aggregatedItem.upsert.mockResolvedValue(mockAggregatedItem)
@@ -139,6 +140,9 @@ describe('/api/excel/manual', () => {
         update: {
           quantity: {
             increment: 10,
+          },
+          count: {
+            increment: 1,
           },
         },
         create: {
@@ -258,6 +262,9 @@ describe('/api/excel/manual', () => {
         update: {
           quantity: {
             increment: 10,
+          },
+          count: {
+            increment: 1,
           },
         },
         create: {

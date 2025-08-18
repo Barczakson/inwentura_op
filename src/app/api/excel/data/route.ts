@@ -3,10 +3,13 @@ import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('GET /api/excel/data called with URL:', request.url)
     const { searchParams } = new URL(request.url)
     const includeRaw = searchParams.get('includeRaw') === 'true'
     const rawOnly = searchParams.get('rawOnly') === 'true'
     const fileId = searchParams.get('fileId')
+    
+    console.log('Parsed parameters:', { includeRaw, rawOnly, fileId })
     
     // Pagination parameters
     const page = parseInt(searchParams.get('page') || '1')
@@ -18,9 +21,13 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get('sortBy') || 'name'
     const sortDirection = searchParams.get('sortDirection') || 'asc'
 
+    console.log('Pagination and search parameters:', { page, limit, offset, search, sortBy, sortDirection })
+
     // Get aggregated data with source file information (skip if rawOnly)
     let aggregatedData = [];
     let paginationMeta: any = null;
+    
+    console.log('About to process aggregated data, rawOnly:', rawOnly, 'fileId:', fileId)
     
     if (rawOnly) {
       // Skip aggregated data when rawOnly is true
@@ -212,9 +219,15 @@ export async function GET(request: NextRequest) {
     }
 
     const response: any = {
-      aggregated: aggregatedWithSourceFiles,
-      raw: rawData
+      aggregated: aggregatedWithSourceFiles
+    };
+
+    // Add raw data only when requested
+    if (includeRaw) {
+      response.raw = rawData;
     }
+
+    // Add pagination metadata if available
 
     // Add pagination metadata if available
     if (paginationMeta) {
@@ -226,7 +239,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching data:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch data' },
+      { error: 'Failed to fetch data', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     )
   }
