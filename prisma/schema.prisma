@@ -20,6 +20,8 @@ model User {
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("users")
 }
 
 model Post {
@@ -30,17 +32,22 @@ model Post {
   authorId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("posts")
 }
 
 model ExcelFile {
-  id          String   @id @default(cuid())
-  fileName    String
-  fileSize    Int
-  rowCount    Int?
-  uploadDate  DateTime @default(now())
-  originalStructure Json? // Stores exact file structure with headers and items
-  rows        ExcelRow[]
-  aggregated  AggregatedItem[]
+  id               String   @id @default(cuid())
+  fileName         String
+  fileSize         Int
+  rowCount         Int?     @default(0)
+  uploadDate       DateTime @default(now())
+  originalStructure Json?   // JSON supported by PostgreSQL
+  rows             ExcelRow[]
+  aggregated       AggregatedItem[]
+
+  @@index([uploadDate])
+  @@map("excel_files")
 }
 
 model ExcelRow {
@@ -49,24 +56,31 @@ model ExcelRow {
   name             String
   quantity         Float
   unit             String
-  originalRowIndex Int       // Position in original Excel file
+  originalRowIndex Int?      // Position in original Excel file
   fileId           String
   file             ExcelFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
   createdAt        DateTime  @default(now())
+
+  @@index([itemId, name, unit])
+  @@index([fileId])
+  @@map("excel_rows")
 }
 
 model AggregatedItem {
-  id          String   @id @default(cuid())
+  id          String     @id @default(cuid())
   itemId      String?
   name        String
   quantity    Float
   unit        String
   fileId      String?
   file        ExcelFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  sourceFiles String? // JSON array of file IDs
-  count       Int?     // Number of source rows
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  sourceFiles String?    // JSON array of file IDs
+  count       Int?       @default(1)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   @@unique([itemId, name, unit])
+  @@index([itemId, name, unit])
+  @@index([fileId])
+  @@map("aggregated_items")
 }
