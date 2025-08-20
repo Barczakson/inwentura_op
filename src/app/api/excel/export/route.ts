@@ -172,7 +172,7 @@ export async function GET(request: NextRequest) {
         'Ilość': item.quantity,
         'JMZ': item.unit,
         'Plik źródłowy': item.file?.fileName || '',
-        'Pozycja w oryginalnym pliku': item.originalRowIndex + 1
+        'Pozycja w oryginalnym pliku': item.originalRowIndex ? item.originalRowIndex + 1 : ''
       }))
 
       // Create workbook
