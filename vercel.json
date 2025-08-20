@@ -4,15 +4,21 @@
   "devCommand": "npm run dev",
   "framework": "nextjs",
   "functions": {
-    "app/**/*.tsx": {
+    "app/api/excel/upload/route.ts": {
       "maxDuration": 30
     },
-    "app/**/*.ts": {
-      "maxDuration": 30
+    "app/api/excel/export/route.ts": {
+      "maxDuration": 20  
+    },
+    "app/api/excel/data/route.ts": {
+      "maxDuration": 10
+    },
+    "app/api/excel/files/route.ts": {
+      "maxDuration": 5
+    },
+    "app/api/excel/manual/route.ts": {
+      "maxDuration": 5
     }
   },
-  "env": {
-    "NEXTAUTH_SECRET": "@nextauth_secret",
-    "DATABASE_URL": "@database_url"
-  }
+  "regions": ["fra1"]
 }
