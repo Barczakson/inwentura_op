@@ -167,7 +167,7 @@ export default function Home() {
       }
       
       const response = await fetch(url.toString())
-      const data = await handleApiResponse(response)
+      const data = await handleApiResponse<any>(response)
       
       
       // Update pagination metadata if available
@@ -210,7 +210,7 @@ export default function Home() {
       })
       
       const response = await fetch(url.toString())
-      const data = await handleApiResponse(response)
+      const data = await handleApiResponse<any>(response)
       
       // Update pagination metadata if available
       if (data.pagination) {
@@ -244,7 +244,7 @@ export default function Home() {
       })
       
       const response = await fetch(url.toString())
-      const data = await handleApiResponse(response)
+      const data = await handleApiResponse<any>(response)
       
       // Update pagination metadata if available
       if (data.pagination) {
@@ -440,7 +440,7 @@ export default function Home() {
         })
       })
 
-      await handleApiResponse(response)
+      await handleApiResponse<any>(response)
 
       setAggregatedData(prev => 
         prev.map(item => item.id === updatedItem.id ? updatedItem : item)
@@ -461,7 +461,7 @@ export default function Home() {
         method: 'DELETE'
       })
 
-      await handleApiResponse(response)
+      await handleApiResponse<any>(response)
 
       setAggregatedData(prev => prev.filter(item => item.id !== id))
       showSuccessToast("Pozycja została usunięta pomyślnie.")
@@ -1061,7 +1061,7 @@ export default function Home() {
                         onSaveInlineEdit={handleSaveInlineEdit}
                         // Pagination props (only for general view)
                         paginationState={currentView === 'general' ? pagination.paginationState : undefined}
-                        paginationMeta={currentView === 'general' ? pagination.paginationMeta : undefined}
+                        paginationMeta={currentView === 'general' ? pagination.paginationMeta || undefined : undefined}
                         onPaginationChange={currentView === 'general' ? {
                           setPage: pagination.setPage,
                           setLimit: pagination.setLimit,
@@ -1115,7 +1115,7 @@ export default function Home() {
                       inlineEditValue={inlineEditValue}
                       // Pagination props for raw data (file view or general view)
                       paginationState={currentView === 'file' ? filePagination.paginationState : rawDataPagination.paginationState}
-                      paginationMeta={currentView === 'file' ? filePagination.paginationMeta : rawDataPagination.paginationMeta}
+                      paginationMeta={currentView === 'file' ? filePagination.paginationMeta || undefined : rawDataPagination.paginationMeta || undefined}
                       onPaginationChange={currentView === 'file' ? {
                         setPage: filePagination.setPage,
                         setLimit: filePagination.setLimit,

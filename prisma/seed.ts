@@ -19,11 +19,11 @@ async function main() {
 
   // Sample rows data
   const sampleRows = [
-    { id: uuidv4(), itemId: '001', name: 'Apple', quantity: 10, unit: 'kg' },
-    { id: uuidv4(), itemId: '002', name: 'Banana', quantity: 15, unit: 'kg' },
-    { id: uuidv4(), itemId: '003', name: 'Orange', quantity: 8, unit: 'kg' },
-    { id: uuidv4(), itemId: '004', name: 'Grapes', quantity: 5, unit: 'kg' },
-    { id: uuidv4(), itemId: '005', name: 'Mango', quantity: 12, unit: 'kg' }
+    { id: uuidv4(), itemId: '001', name: 'Apple', quantity: 10, unit: 'kg', originalRowIndex: 1 },
+    { id: uuidv4(), itemId: '002', name: 'Banana', quantity: 15, unit: 'kg', originalRowIndex: 2 },
+    { id: uuidv4(), itemId: '003', name: 'Orange', quantity: 8, unit: 'kg', originalRowIndex: 3 },
+    { id: uuidv4(), itemId: '004', name: 'Grapes', quantity: 5, unit: 'kg', originalRowIndex: 4 },
+    { id: uuidv4(), itemId: '005', name: 'Mango', quantity: 12, unit: 'kg', originalRowIndex: 5 }
   ]
 
   // Save sample rows

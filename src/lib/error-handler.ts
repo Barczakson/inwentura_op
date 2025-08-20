@@ -249,6 +249,7 @@ export function validateForm<T extends Record<string, any>>(
   const errors: AppError[] = []
 
   for (const [field, validator] of Object.entries(validators)) {
+    if (!validator) continue
     const value = data[field as keyof T]
     const validationError = validator(value)
     

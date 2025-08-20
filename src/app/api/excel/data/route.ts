@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     console.log('Pagination and search parameters:', { page, limit, offset, search, sortBy, sortDirection })
 
     // Get aggregated data with source file information (skip if rawOnly)
-    let aggregatedData = [];
+    let aggregatedData: any[] = [];
     let paginationMeta: any = null;
     
     console.log('About to process aggregated data, rawOnly:', rawOnly, 'fileId:', fileId)
