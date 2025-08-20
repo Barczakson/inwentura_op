@@ -11,7 +11,38 @@ import * as XLSX from 'xlsx'
 // Mock Prisma
 jest.mock('@/lib/db', () => {
   const mockData = {
-    files: [] as any[],
+    files: [
+      {
+        id: 'file-1',
+        fileName: 'test.xlsx',
+        originalStructure: [
+          { type: 'item', itemId: 'A001', name: 'Product A', quantity: 10, unit: 'kg', originalRowIndex: 1 },
+          { type: 'item', itemId: 'A002', name: 'Product B', quantity: 5, unit: 'l', originalRowIndex: 2 }
+        ],
+        rows: [
+          {
+            id: 'row-1',
+            itemId: 'A001',
+            name: 'Product A',
+            quantity: 10,
+            unit: 'kg',
+            originalRowIndex: 1,
+            fileId: 'file-1',
+            file: { id: 'file-1', fileName: 'test.xlsx' }
+          },
+          {
+            id: 'row-2',
+            itemId: 'A002',
+            name: 'Product B',
+            quantity: 5,
+            unit: 'l',
+            originalRowIndex: 2,
+            fileId: 'file-1',
+            file: { id: 'file-1', fileName: 'test.xlsx' }
+          }
+        ]
+      }
+    ] as any[],
     rows: [] as any[],
     aggregated: [] as any[],
   }
