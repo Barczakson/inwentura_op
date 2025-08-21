@@ -1,2 +1,2 @@
-// Import the enhanced Prisma client from prisma.ts
-export { prisma as db } from './prisma'
+// Import the enhanced Prisma client from db-config.ts
+export { db } from './db-config'

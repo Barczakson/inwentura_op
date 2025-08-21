@@ -1,0 +1,111 @@
+// This is your Prisma schema file for development with SQLite
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  content   String?
+  published Boolean  @default(false)
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("posts")
+}
+
+model ExcelFile {
+  id               String   @id @default(cuid())
+  fileName         String
+  fileSize         Int
+  rowCount         Int?     @default(0)
+  uploadDate       DateTime @default(now())
+  originalStructure String?  // Store as String for SQLite compatibility
+  columnMapping    String?  // Store as String for SQLite compatibility
+  detectedHeaders  String?  // Store as String for SQLite compatibility
+  rows             ExcelRow[]
+  aggregated       AggregatedItem[]
+
+  @@index([uploadDate])
+  @@map("excel_files")
+}
+
+model ExcelRow {
+  id               String    @id @default(cuid())
+  itemId           String?
+  name             String
+  quantity         Float
+  unit             String
+  originalRowIndex Int?      // Position in original Excel file
+  fileId           String
+  file             ExcelFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now())
+
+  @@index([itemId, name, unit])
+  @@index([fileId])
+  @@index([name]) // For name-based searches
+  @@index([createdAt]) // For time-based queries
+  @@index([fileId, originalRowIndex]) // For file-specific ordering
+  @@map("excel_rows")
+}
+
+model AggregatedItem {
+  id          String     @id @default(cuid())
+  itemId      String?
+  name        String
+  quantity    Float
+  unit        String
+  fileId      String?
+  file        ExcelFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  sourceFiles String?    // Store as String for SQLite compatibility
+  count       Int?       @default(1)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([itemId, name, unit], name: "itemId_name_unit")
+  @@index([itemId, name, unit])
+  @@index([fileId])
+  @@index([name]) // For name-based searches
+  @@index([quantity]) // For quantity-based sorting
+  @@index([updatedAt]) // For recently updated items
+  @@index([count]) // For count-based queries
+  @@map("aggregated_items")
+}
+
+model ColumnMapping {
+  id          String   @id @default(cuid())
+  name        String   // User-friendly name for this mapping
+  description String?  // Optional description
+  isDefault   Boolean  @default(false)
+  mapping     String   // Store as String for SQLite compatibility
+  headers     String?  // Store as String for SQLite compatibility
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Track usage
+  usageCount  Int      @default(0)
+  lastUsed    DateTime?
+  
+  @@index([isDefault])
+  @@index([usageCount])
+  @@index([lastUsed])
+  @@map("column_mappings")
+}
