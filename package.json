@@ -10,6 +10,10 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:column-mapping": "jest --testPathPatterns=column",
+    "test:api": "jest --selectProjects server",
+    "test:client": "jest --selectProjects client",
+    "test:integration": "jest --testPathPatterns=integration",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -113,8 +117,10 @@
     "eslint-config-next": "15.3.5",
     "jest": "^30.0.5",
     "jest-environment-jsdom": "^30.0.5",
+    "jest-mock-extended": "^4.0.0",
     "nodemon": "^3.1.10",
     "tailwindcss": "^4",
+    "ts-jest": "^29.4.1",
     "tw-animate-css": "^1.3.5"
   }
 }

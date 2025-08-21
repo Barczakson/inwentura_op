@@ -16,6 +16,9 @@ const customJestConfig = {
     'src/**/*.{js,jsx,ts,tsx}',
     '!src/**/*.d.ts',
     '!src/lib/socket.ts',
+    '!src/**/__tests__/**',
+    '!src/**/*.test.{js,jsx,ts,tsx}',
+    '!src/**/*.spec.{js,jsx,ts,tsx}',
   ],
   testPathIgnorePatterns: [
     '<rootDir>/.next/',
@@ -25,6 +28,42 @@ const customJestConfig = {
     '<rootDir>/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/src/**/*.{test,spec}.{js,jsx,ts,tsx}',
+  ],
+  // Server-side tests (API routes) should use Node environment
+  testEnvironmentOptions: {
+    url: 'http://localhost:3000'
+  },
+  // Configure different environments for different test types
+  projects: [
+    {
+      displayName: 'client',
+      testEnvironment: 'jsdom',
+      testMatch: [
+        '<rootDir>/src/components/**/*.{test,spec}.{js,jsx,ts,tsx}',
+        '<rootDir>/src/hooks/**/*.{test,spec}.{js,jsx,ts,tsx}',
+        '<rootDir>/src/lib/**/*.{test,spec}.{js,jsx,ts,tsx}',
+        '<rootDir>/src/lib/__tests__/**/*.{js,jsx,ts,tsx}',
+      ],
+      setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+      moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/src/$1',
+      },
+      preset: 'ts-jest',
+    },
+    {
+      displayName: 'server',
+      testEnvironment: 'node',
+      testMatch: [
+        '<rootDir>/src/app/api/**/*.{test,spec}.{js,jsx,ts,tsx}',
+        '<rootDir>/src/app/api/**/__tests__/**/*.{js,jsx,ts,tsx}',
+        '<rootDir>/src/lib/__tests__/integration/**/*.{js,jsx,ts,tsx}',
+      ],
+      setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+      moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/src/$1',
+      },
+      preset: 'ts-jest',
+    }
   ],
 }
 
