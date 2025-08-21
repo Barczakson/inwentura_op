@@ -1,8 +1,17 @@
 import { NextRequest } from 'next/server'
-import { POST } from '../route'
 import * as XLSX from 'xlsx'
-import { db } from '@/lib/db-config'
-import { prismaMock } from '../../../../../../__mocks__/prisma'
+
+// Mock Prisma first
+const prismaMock = {
+  excelFile: {
+    create: jest.fn(),
+  },
+  aggregatedItem: {
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    create: jest.fn(),
+  },
+}
 
 // Mock dependencies
 jest.mock('xlsx', () => ({
@@ -24,6 +33,8 @@ jest.mock('@/lib/column-detection', () => ({
   applyMapping: jest.fn()
 }))
 
+// Import after mocking
+import { POST } from '../route'
 import { applyMapping } from '@/lib/column-detection'
 import { withTransaction, queries } from '@/lib/db-config'
 

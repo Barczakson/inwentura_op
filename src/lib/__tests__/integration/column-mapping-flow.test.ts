@@ -1,9 +1,22 @@
-import { NextRequest } from 'next/server'
-import { POST as PreviewPOST } from '../../../app/api/excel/preview/route'
-import { POST as MappingPOST } from '../../../app/api/excel/column-mapping/route'
-import { POST as UploadPOST } from '../../../app/api/excel/upload/route'
-import * as XLSX from 'xlsx'
-import { prismaMock } from '../../../../__mocks__/prisma'
+// Mock Prisma first
+const prismaMock = {
+  excelFile: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+  },
+  aggregatedItem: {
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    create: jest.fn(),
+  },
+  columnMapping: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
+}
 
 // Mock all dependencies
 jest.mock('xlsx')
@@ -15,6 +28,12 @@ jest.mock('@/lib/db-config', () => ({
   }
 }))
 
+// Import after mocking
+import { NextRequest } from 'next/server'
+import { POST as PreviewPOST } from '../../../app/api/excel/preview/route'
+import { POST as MappingPOST } from '../../../app/api/excel/column-mapping/route'
+import { POST as UploadPOST } from '../../../app/api/excel/upload/route'
+import * as XLSX from 'xlsx'
 import { withTransaction, queries } from '@/lib/db-config'
 
 const mockWithTransaction = withTransaction as jest.MockedFunction<typeof withTransaction>

@@ -124,7 +124,7 @@ async function processPreview(request: NextRequest) {
         // Get sample data rows (next 5-10 rows after header)
         sampleDataRows = jsonData
           .slice(i + 1, i + 11)
-          .filter(row => row && row.length > 0)
+          .filter((row: any) => row && Array.isArray(row) && row.length > 0)
           .slice(0, 5) as any[][]
         
         break
@@ -140,8 +140,8 @@ async function processPreview(request: NextRequest) {
     monitor.checkpoint('headers_detected')
     
     // Attempt automatic column detection
-    let detection = null
-    let detectionError = null
+    let detection: any = null
+    let detectionError: string | null = null
     
     try {
       detection = detectColumns(headers, sampleDataRows)

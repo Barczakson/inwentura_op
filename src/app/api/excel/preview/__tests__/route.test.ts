@@ -29,8 +29,11 @@ describe('/api/excel/preview', () => {
   })
 
   const createMockFile = (name: string, size: number, type: string) => {
-    const buffer = Buffer.from('mock excel content')
-    return new File([buffer], name, { type }) as File
+    const buffer = Buffer.alloc(size, 'mock excel content')
+    const file = new File([buffer], name, { type }) as File
+    // Override the size property for testing
+    Object.defineProperty(file, 'size', { value: size, writable: false })
+    return file
   }
 
   const createMockWorkbook = (sheetNames: string[], worksheets: any) => ({

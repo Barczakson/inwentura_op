@@ -42,33 +42,10 @@ export const db = globalForPrisma.prisma ?? new PrismaClient({
 })
 
 // Performance monitoring for database queries
-if (DATABASE_CONFIG.query_logging && process.env.NODE_ENV === 'development') {
-  db.$on('query', (e) => {
-    if (e.duration > DATABASE_CONFIG.slow_query_threshold) {
-      console.warn('Slow Query Detected:', {
-        query: e.query,
-        duration: `${e.duration}ms`,
-        params: e.params,
-        timestamp: e.timestamp,
-      })
-    }
-  })
-  
-  db.$on('error', (e) => {
-    console.error('Database Error:', {
-      message: e.message,
-      target: e.target,
-      timestamp: e.timestamp,
-    })
-  })
-  
-  db.$on('warn', (e) => {
-    console.warn('Database Warning:', {
-      message: e.message,
-      target: e.target,
-      timestamp: e.timestamp,
-    })
-  })
+// Note: Database event logging disabled for SQLite compatibility
+// Query monitoring would be available in production with PostgreSQL
+if (process.env.NODE_ENV === 'development') {
+  console.log('Database monitoring disabled for SQLite development environment')
 }
 
 // Connection pool management
@@ -93,24 +70,28 @@ process.on('SIGTERM', async () => {
  * Transaction wrapper with performance monitoring
  */
 export async function withTransaction<T>(
-  callback: (tx: PrismaClient) => Promise<T>,
+  callback: (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>) => Promise<T>,
   options: {
     maxWait?: number
     timeout?: number
-    isolationLevel?: 'ReadUncommitted' | 'ReadCommitted' | 'RepeatableRead' | 'Serializable'
+    isolationLevel?: 'Serializable' // SQLite only supports Serializable isolation level
   } = {}
 ): Promise<T> {
   const startTime = performance.now()
   
   try {
-    const result = await db.$transaction(
-      callback as any,
-      {
-        maxWait: options.maxWait || 5000, // 5 seconds
-        timeout: options.timeout || 10000, // 10 seconds
-        isolationLevel: options.isolationLevel,
-      }
-    )
+    // SQLite transaction options are more limited than PostgreSQL
+    const transactionOptions: any = {
+      maxWait: options.maxWait || 5000, // 5 seconds
+      timeout: options.timeout || 10000, // 10 seconds
+    }
+    
+    // Only add isolationLevel if it's Serializable (SQLite default)
+    if (options.isolationLevel === 'Serializable') {
+      transactionOptions.isolationLevel = options.isolationLevel
+    }
+    
+    const result = await db.$transaction(callback, transactionOptions)
     
     const duration = performance.now() - startTime
     
@@ -158,6 +139,7 @@ export const queries = {
         name: true,
         quantity: true,
         unit: true,
+        fileId: true,
         sourceFiles: true,
         count: true,
         createdAt: true,
@@ -167,6 +149,12 @@ export const queries = {
             select: {
               id: true,
               fileName: true,
+              fileSize: true,
+              rowCount: true,
+              uploadDate: true,
+              originalStructure: true,
+              columnMapping: true,
+              detectedHeaders: true,
             },
           },
         }),
@@ -232,8 +220,10 @@ export const queries = {
         uploadDate: true,
         ...(params.includeStats && {
           _count: {
-            rows: true,
-            aggregated: true,
+            select: {
+              rows: true,
+              aggregated: true,
+            },
           },
         }),
       },
@@ -248,13 +238,13 @@ export const queries = {
    * Batch create excel rows with optimized performance
    */
   async batchCreateExcelRows(rows: any[], batchSize = 1000) {
-    const results = []
+    const results: { count: number }[] = []
     
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = rows.slice(i, i + batchSize)
       const result = await db.excelRow.createMany({
         data: batch,
-        skipDuplicates: true,
+        // Note: skipDuplicates not available in SQLite
       })
       results.push(result)
       

@@ -1,7 +1,13 @@
-import { NextRequest } from 'next/server'
-import { GET, POST, PUT, DELETE } from '../route'
-import { db } from '@/lib/db-config'
-import { prismaMock } from '../../../../../../__mocks__/prisma'
+// Mock Prisma first
+const prismaMock = {
+  columnMapping: {
+    findMany: jest.fn(),
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
+}
 
 // Mock the database
 jest.mock('@/lib/db-config', () => ({
@@ -15,6 +21,9 @@ jest.mock('@/lib/column-detection', () => ({
   createDefaultMapping: jest.fn(),
 }))
 
+// Import after mocking
+import { NextRequest } from 'next/server'
+import { GET, POST, PUT, DELETE } from '../route'
 import { detectColumns, validateMapping, createDefaultMapping } from '@/lib/column-detection'
 
 const mockDetectColumns = detectColumns as jest.MockedFunction<typeof detectColumns>

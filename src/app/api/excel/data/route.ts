@@ -32,7 +32,7 @@ async function processGetRequest(request: NextRequest) {
   }
   
   try {
-    const { searchParams } = validation.sanitized.searchParams
+    const searchParams = validation.sanitized.searchParams
     const includeRaw = searchParams.get('includeRaw') === 'true'
     const rawOnly = searchParams.get('rawOnly') === 'true'
     const fileId = searchParams.get('fileId')
@@ -288,7 +288,7 @@ async function processSourceFiles(aggregatedData: any[], monitor: PerformanceMon
   return aggregatedData.map(item => {
     const key = `${item.itemId || ''}|${item.name}|${item.unit}`
     const itemSourceRows = sourceRowsMap.get(key) || []
-    const sourceFileIds = [...new Set(itemSourceRows.map(row => row.fileId))]
+    const sourceFileIds = [...new Set(itemSourceRows.map(row => row.fileId).filter(Boolean))] as string[]
     
     let sourceFiles: string[] = sourceFileIds
     if (item.sourceFiles) {

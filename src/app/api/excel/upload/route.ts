@@ -208,11 +208,11 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
           structure.push({
             type: 'item',
             content: {
-              lp: extractedData.lp || i + 1,
-              itemId: extractedData.itemId || null,
-              name: extractedData.name,
-              quantity: extractedData.quantity,
-              unit: extractedData.unit
+              lp: lp,
+              itemId: itemId || null,
+              name: name,
+              quantity: quantity,
+              unit: unit
             },
             originalRowIndex: i,
             excelRow: i + 1,
@@ -220,18 +220,18 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
           })
 
           // Build aggregation data (for quick access later)
-          const key = `${extractedData.itemId || ''}|${extractedData.name}|${extractedData.unit}`
+          const key = `${itemId || ''}|${name}|${unit}`
           if (aggregatedData.has(key)) {
             const existing = aggregatedData.get(key)
-            existing.quantity += extractedData.quantity
+            existing.quantity += quantity
             existing.sourceRowIds.push(rowId)
           } else {
             aggregatedData.set(key, {
               id: uuidv4(),
-              itemId: extractedData.itemId || null,
-              name: extractedData.name,
-              quantity: extractedData.quantity,
-              unit: extractedData.unit,
+              itemId: itemId || null,
+              name: name,
+              quantity: quantity,
+              unit: unit,
               sourceRowIds: [rowId]
             })
           }
@@ -289,7 +289,7 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
         ...item,
         sourceFiles: JSON.stringify([fileId]),
         count: item.sourceRowIds.length,
-        fileId: excelFile.id
+        fileId: fileId
       }))
 
       for (const item of aggregatedWithSourceFiles) {
@@ -342,7 +342,7 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
               name: item.name,
               quantity: item.quantity,
               unit: item.unit,
-              fileId: excelFile.id,
+              fileId: fileId,
               sourceFiles: item.sourceFiles,
               count: item.count
             }
