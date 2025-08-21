@@ -208,11 +208,11 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
           structure.push({
             type: 'item',
             content: {
-              lp: lp,
-              itemId: itemId || null,
-              name,
-              quantity,
-              unit
+              lp: extractedData.lp || i + 1,
+              itemId: extractedData.itemId || null,
+              name: extractedData.name,
+              quantity: extractedData.quantity,
+              unit: extractedData.unit
             },
             originalRowIndex: i,
             excelRow: i + 1,
@@ -220,18 +220,18 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
           })
 
           // Build aggregation data (for quick access later)
-          const key = `${itemId || ''}|${name}|${unit}`
+          const key = `${extractedData.itemId || ''}|${extractedData.name}|${extractedData.unit}`
           if (aggregatedData.has(key)) {
             const existing = aggregatedData.get(key)
-            existing.quantity += quantity
+            existing.quantity += extractedData.quantity
             existing.sourceRowIds.push(rowId)
           } else {
             aggregatedData.set(key, {
               id: uuidv4(),
-              itemId: itemId || null,
-              name,
-              quantity,
-              unit,
+              itemId: extractedData.itemId || null,
+              name: extractedData.name,
+              quantity: extractedData.quantity,
+              unit: extractedData.unit,
               sourceRowIds: [rowId]
             })
           }

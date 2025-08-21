@@ -43,6 +43,8 @@ model ExcelFile {
   rowCount         Int?     @default(0)
   uploadDate       DateTime @default(now())
   originalStructure Json?   // JSON supported by PostgreSQL
+  columnMapping    Json?    // Applied column mapping for this file
+  detectedHeaders  Json?    // Headers detected in this file
   rows             ExcelRow[]
   aggregated       AggregatedItem[]
 
@@ -90,4 +92,24 @@ model AggregatedItem {
   @@index([updatedAt]) // For recently updated items
   @@index([count]) // For count-based queries
   @@map("aggregated_items")
+}
+
+model ColumnMapping {
+  id          String   @id @default(cuid())
+  name        String   // User-friendly name for this mapping
+  description String?  // Optional description
+  isDefault   Boolean  @default(false)
+  mapping     Json     // Column mapping configuration
+  headers     Json?    // Sample headers this mapping was created for
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Track usage
+  usageCount  Int      @default(0)
+  lastUsed    DateTime?
+  
+  @@index([isDefault])
+  @@index([usageCount])
+  @@index([lastUsed])
+  @@map("column_mappings")
 }
