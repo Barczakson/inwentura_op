@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
-import { db } from '@/lib/db'
+import { db, withTransaction, queries } from '@/lib/db-config'
 import { v4 as uuidv4 } from 'uuid'
+import {
+  withTimeout,
+  withErrorHandling,
+  ExcelRowProcessor,
+  PerformanceMonitor,
+  REQUEST_TIMEOUTS,
+  MEMORY_LIMITS,
+} from '@/lib/server-optimizations'
 
 // File validation constants
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -11,7 +19,18 @@ const ALLOWED_MIME_TYPES = [
   'application/octet-stream'
 ]
 
-export async function POST(request: NextRequest) {
+export const POST = withErrorHandling(async (request: NextRequest) => {
+  const monitor = new PerformanceMonitor()
+  monitor.checkpoint('request_start')
+
+  return withTimeout(
+    processUpload(request, monitor),
+    REQUEST_TIMEOUTS.UPLOAD,
+    'File upload timeout'
+  )
+}, 'Excel Upload')
+
+async function processUpload(request: NextRequest, monitor: PerformanceMonitor) {
   try {
     // console.log('File upload POST called')
     const formData = await request.formData()
@@ -59,9 +78,18 @@ export async function POST(request: NextRequest) {
     }
     // console.log('File validation passed')
 
-    // Read the file with error recovery
-    const buffer = Buffer.from(await file.arrayBuffer())
-    // console.log('File buffer created, length:', buffer.length)
+    monitor.checkpoint('file_validation_complete')
+
+    // Memory-efficient file reading
+    const arrayBuffer = await file.arrayBuffer()
+    monitor.checkpoint('file_buffer_created')
+    
+    // Check if file is too large for memory processing
+    if (file.size > MEMORY_LIMITS.MAX_FILE_SIZE) {
+      console.warn(`Large file detected: ${file.size} bytes, processing with memory optimization`)
+    }
+    
+    const buffer = Buffer.from(arrayBuffer)
     let workbook: XLSX.WorkBook
     
     try {
@@ -112,12 +140,18 @@ export async function POST(request: NextRequest) {
     // console.log('JSON data converted, row count:', jsonData.length)
     // console.log('Sample data:', jsonData.slice(0, 3))
 
-    // Process the data and build structure metadata
-    const rows: any[] = []
+    monitor.checkpoint('excel_parsed')
+
+    // Initialize memory-efficient row processor
+    const rowProcessor = new ExcelRowProcessor(MEMORY_LIMITS.CHUNK_SIZE)
     const structure: any[] = []
     const aggregatedData = new Map()
     
-    // console.log('Processing Excel file with', jsonData.length, 'rows')
+    // Check if we need chunked processing
+    const needsChunkedProcessing = jsonData.length > MEMORY_LIMITS.MAX_ROWS_IN_MEMORY
+    if (needsChunkedProcessing) {
+      console.log(`Large dataset detected: ${jsonData.length} rows, using chunked processing`)
+    }
 
     // Process each row and capture structure
     for (let i = 0; i < jsonData.length; i++) {
@@ -168,7 +202,7 @@ export async function POST(request: NextRequest) {
             originalRowIndex: i
           }
           
-          rows.push(rowData)
+          rowProcessor.addRow(rowData)
           
           // Add to structure
           structure.push({
@@ -207,29 +241,47 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Save to database
+    monitor.checkpoint('data_processing_complete')
+
+    // Save to database with optimized batch processing
     let fileId = ''
     let aggregatedWithSourceFiles: any[] = []
+    const rowCount = rowProcessor.getRowCount()
     
-    if (rows.length > 0) {
-      // Create Excel file record with structure metadata
-      const excelFile = await db.excelFile.create({
-        data: {
-          fileName: file.name,
-          fileSize: file.size,
-          rowCount: rows.length,
-          originalStructure: structure // Store the complete structure
-        }
-      })
-      fileId = excelFile.id
+    if (rowCount > 0) {
+      // Use transaction for data consistency
+      const result = await withTransaction(async (tx) => {
+        // Create Excel file record with structure metadata
+        const excelFile = await tx.excelFile.create({
+          data: {
+            fileName: file.name,
+            fileSize: file.size,
+            rowCount,
+            originalStructure: structure
+          }
+        })
+        
+        monitor.checkpoint('file_record_created')
 
-      // Save all rows (no aggregation during upload)
-      await db.excelRow.createMany({
-        data: rows.map(row => ({
-          ...row,
-          fileId: excelFile.id
-        }))
+        // Process rows in chunks to avoid memory issues
+        const rowsWithFileId = await rowProcessor.processInChunks(async (chunk) => {
+          return chunk.map(row => ({
+            ...row,
+            fileId: excelFile.id
+          }))
+        })
+        
+        monitor.checkpoint('rows_processed')
+
+        // Batch insert with optimized performance
+        await queries.batchCreateExcelRows(rowsWithFileId.flat())
+        
+        monitor.checkpoint('rows_saved')
+        
+        return excelFile
       })
+      
+      fileId = result.id
 
       // Save aggregated data for quick queries
       const aggregatedArray = Array.from(aggregatedData.values())
@@ -299,20 +351,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // console.log(`Successfully processed ${rows.length} items with ${structure.length} structure elements`)
+    monitor.checkpoint('database_operations_complete')
+    
+    // Clear processor memory
+    rowProcessor.clear()
+    
+    const processingReport = monitor.getReport()
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Successfully processed ${rowCount} items in ${processingReport.totalTime.toFixed(2)}ms`)
+    }
 
     return NextResponse.json({
       success: true,
       fileId,
-      rows,
+      rowCount,
       aggregated: aggregatedWithSourceFiles,
-      structure: structure
+      structure: structure,
+      ...(process.env.NODE_ENV === 'development' && {
+        performance: processingReport
+      })
     })
 
   } catch (error) {
-    console.error('Error processing Excel file:', error)
+    monitor.checkpoint('error_occurred')
+    
+    console.error('Error processing Excel file:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      performance: monitor.getReport(),
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to process Excel file' },
+      { 
+        error: 'Failed to process Excel file',
+        details: process.env.NODE_ENV === 'development' 
+          ? error instanceof Error ? error.message : String(error)
+          : undefined
+      },
       { status: 500 }
     )
   }

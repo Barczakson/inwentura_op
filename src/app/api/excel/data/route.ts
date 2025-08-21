@@ -1,10 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, queries } from '@/lib/db-config'
+import {
+  withTimeout,
+  withErrorHandling,
+  createCompressedResponse,
+  validateAndSanitizeRequest,
+  PerformanceMonitor,
+  REQUEST_TIMEOUTS,
+  OPTIMIZED_QUERIES,
+} from '@/lib/server-optimizations'
 
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandling(async (request: NextRequest) => {
+  return withTimeout(
+    processGetRequest(request),
+    REQUEST_TIMEOUTS.DEFAULT,
+    'Data fetch timeout'
+  )
+}, 'Excel Data GET')
+
+async function processGetRequest(request: NextRequest) {
+  const monitor = new PerformanceMonitor()
+  monitor.checkpoint('request_start')
+  
+  // Validate and sanitize request
+  const validation = validateAndSanitizeRequest(request)
+  if (!validation.isValid) {
+    return NextResponse.json(
+      { error: 'Invalid request', details: validation.errors },
+      { status: 400 }
+    )
+  }
+  
   try {
-    // console.log('GET /api/excel/data called with URL:', request.url)
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = validation.sanitized.searchParams
     const includeRaw = searchParams.get('includeRaw') === 'true'
     const rawOnly = searchParams.get('rawOnly') === 'true'
     const fileId = searchParams.get('fileId')
@@ -23,31 +51,27 @@ export async function GET(request: NextRequest) {
 
     // console.log('Pagination and search parameters:', { page, limit, offset, search, sortBy, sortDirection })
 
-    // Get aggregated data with source file information (skip if rawOnly)
-    let aggregatedData: any[] = [];
-    let paginationMeta: any = null;
+    monitor.checkpoint('parameters_parsed')
     
-    // console.log('About to process aggregated data, rawOnly:', rawOnly, 'fileId:', fileId)
+    // Get aggregated data with optimized queries
+    let aggregatedData: any[] = []
+    let paginationMeta: any = null
     
     if (rawOnly) {
       // Skip aggregated data when rawOnly is true
-      aggregatedData = [];
+      aggregatedData = []
     } else if (fileId) {
-      // When filtering by file, find aggregated items that include this file in their sourceFiles
-      const allAggregatedData = await db.aggregatedItem.findMany({
-        include: {
-          file: {
-            select: {
-              id: true,
-              fileName: true
-            }
-          }
-        },
+      // Optimized query for file-specific aggregated items
+      const allAggregatedData = await queries.getAggregatedItems({
+        where: {},
         orderBy: [
           { name: 'asc' },
           { unit: 'asc' }
-        ]
-      });
+        ],
+        includeFile: true
+      })
+      
+      monitor.checkpoint('file_aggregated_data_fetched')
       
       // Filter aggregated items that contain the specific fileId in their sourceFiles
       aggregatedData = allAggregatedData.filter(item => {
@@ -77,23 +101,18 @@ export async function GET(request: NextRequest) {
         where: whereClause
       })
 
-      // Get all aggregated data when no file filter is specified
-      aggregatedData = await db.aggregatedItem.findMany({
+      // Optimized aggregated data query with pagination
+      aggregatedData = await queries.getAggregatedItems({
         where: whereClause,
-        include: {
-          file: {
-            select: {
-              id: true,
-              fileName: true
-            }
-          }
-        },
         orderBy: {
           [sortBy]: sortDirection as 'asc' | 'desc'
         },
         skip: offset,
-        take: limit
+        take: limit,
+        includeFile: true
       })
+      
+      monitor.checkpoint('aggregated_data_fetched')
 
       // Add pagination metadata to response
       paginationMeta = {
@@ -106,44 +125,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get source files for each aggregated item
-    const aggregatedWithSourceFiles = await Promise.all(
-      aggregatedData.map(async (item) => {
-        // Find all source rows that contributed to this aggregated item
-        const sourceRows = await db.excelRow.findMany({
-          where: {
-            name: item.name,
-            unit: item.unit,
-            itemId: item.itemId || null
-          },
-          select: {
-            fileId: true
-          }
-        })
-
-        const sourceFileIds = [...new Set(sourceRows.map(row => row.fileId))]
-        
-        let sourceFiles: string[] = sourceFileIds
-        if (item.sourceFiles) {
-          try {
-            sourceFiles = JSON.parse(item.sourceFiles) as string[]
-          } catch (error) {
-            console.warn('Failed to parse sourceFiles JSON:', error)
-            sourceFiles = sourceFileIds
-          }
-        }
-        
-        return {
-          ...item,
-          sourceFiles,
-          count: item.count || sourceRows.length
-        }
-      })
-    )
+    // Optimized source files processing with batch queries
+    const aggregatedWithSourceFiles = await processSourceFiles(aggregatedData, monitor)
 
     let rawData: any[] = []
     if (includeRaw) {
-      // Build where clause for raw data
+      monitor.checkpoint('raw_data_processing_start')
+      
+      // Build optimized where clause for raw data
       const rawWhereClause: any = fileId ? { fileId: fileId } : {}
       
       // Add search functionality for raw data
@@ -174,21 +163,15 @@ export async function GET(request: NextRequest) {
           where: rawWhereClause
         })
         
-        rawData = await db.excelRow.findMany({
+        // Optimized raw data query
+        rawData = await queries.getExcelRows({
           where: rawWhereClause,
-          include: {
-            file: {
-              select: {
-                fileName: true,
-                uploadDate: true
-              }
-            }
-          },
           orderBy: {
             [sortBy === 'quantity' ? 'quantity' : sortBy === 'unit' ? 'unit' : 'name']: sortDirection as 'asc' | 'desc'
           },
           skip: offset,
-          take: limit
+          take: limit,
+          includeFile: true
         })
         
         // Update pagination metadata for raw data when viewing a file or in rawOnly mode
@@ -201,51 +184,142 @@ export async function GET(request: NextRequest) {
           hasPrev: page > 1
         }
       } else {
-        rawData = await db.excelRow.findMany({
+        // Optimized raw data query without pagination
+        rawData = await queries.getExcelRows({
           where: rawWhereClause,
-          include: {
-            file: {
-              select: {
-                fileName: true,
-                uploadDate: true
-              }
-            }
-          },
           orderBy: {
             createdAt: 'desc'
-          }
+          },
+          includeFile: true
         })
       }
     }
 
+    monitor.checkpoint('data_processing_complete')
+    
     const response: any = {
       aggregated: aggregatedWithSourceFiles
-    };
+    }
 
     // Add raw data only when requested
     if (includeRaw) {
-      response.raw = rawData;
+      response.raw = rawData
+      monitor.checkpoint('raw_data_added')
     }
-
-    // Add pagination metadata if available
 
     // Add pagination metadata if available
     if (paginationMeta) {
       response.pagination = paginationMeta
     }
+    
+    // Add performance data in development
+    if (process.env.NODE_ENV === 'development') {
+      response.performance = monitor.getReport()
+    }
+
+    // Return compressed response for large datasets
+    if (JSON.stringify(response).length > 10000) {
+      return createCompressedResponse(response)
+    }
 
     return NextResponse.json(response)
 
   } catch (error) {
-    console.error('Error fetching data:', error)
+    monitor.checkpoint('error_occurred')
+    
+    console.error('Error fetching data:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      performance: monitor.getReport(),
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to fetch data', details: error instanceof Error ? error.message : String(error) },
+      { 
+        error: 'Failed to fetch data', 
+        details: process.env.NODE_ENV === 'development' 
+          ? error instanceof Error ? error.message : String(error)
+          : undefined
+      },
       { status: 500 }
     )
   }
 }
 
-export async function PUT(request: NextRequest) {
+/**
+ * Optimized source files processing with batch queries
+ */
+async function processSourceFiles(aggregatedData: any[], monitor: PerformanceMonitor) {
+  if (aggregatedData.length === 0) return []
+  
+  // Batch query for all source rows to minimize database calls
+  const uniqueItems = aggregatedData.map(item => ({
+    itemId: item.itemId,
+    name: item.name,
+    unit: item.unit
+  }))
+  
+  // Build OR conditions for batch query
+  const sourceRowsQuery = {
+    OR: uniqueItems.map(item => ({
+      itemId: item.itemId || null,
+      name: item.name,
+      unit: item.unit
+    }))
+  }
+  
+  const sourceRows = await queries.getExcelRows({
+    where: sourceRowsQuery,
+    includeFile: false
+  })
+  
+  monitor.checkpoint('source_files_batch_fetched')
+  
+  // Group source rows by item key
+  const sourceRowsMap = new Map()
+  sourceRows.forEach(row => {
+    const key = `${row.itemId || ''}|${row.name}|${row.unit}`
+    if (!sourceRowsMap.has(key)) {
+      sourceRowsMap.set(key, [])
+    }
+    sourceRowsMap.get(key).push(row)
+  })
+  
+  // Process aggregated data with source files
+  return aggregatedData.map(item => {
+    const key = `${item.itemId || ''}|${item.name}|${item.unit}`
+    const itemSourceRows = sourceRowsMap.get(key) || []
+    const sourceFileIds = [...new Set(itemSourceRows.map(row => row.fileId))]
+    
+    let sourceFiles: string[] = sourceFileIds
+    if (item.sourceFiles) {
+      try {
+        sourceFiles = JSON.parse(item.sourceFiles) as string[]
+      } catch (error) {
+        console.warn('Failed to parse sourceFiles JSON:', error)
+        sourceFiles = sourceFileIds
+      }
+    }
+    
+    return {
+      ...item,
+      sourceFiles,
+      count: item.count || itemSourceRows.length
+    }
+  })
+}
+
+export const PUT = withErrorHandling(async (request: NextRequest) => {
+  return withTimeout(
+    processPutRequest(request),
+    REQUEST_TIMEOUTS.DEFAULT,
+    'Data update timeout'
+  )
+}, 'Excel Data PUT')
+
+async function processPutRequest(request: NextRequest) {
+  const monitor = new PerformanceMonitor()
+  monitor.checkpoint('request_start')
+  
   try {
     const { id, quantity } = await request.json()
 
@@ -256,23 +330,59 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    monitor.checkpoint('validation_complete')
+    
     const updatedItem = await db.aggregatedItem.update({
       where: { id },
-      data: { quantity }
+      data: { 
+        quantity,
+        updatedAt: new Date()
+      },
+      select: OPTIMIZED_QUERIES.AGGREGATED_ITEM_SELECT
+    })
+    
+    monitor.checkpoint('item_updated')
+
+    return NextResponse.json({
+      ...updatedItem,
+      ...(process.env.NODE_ENV === 'development' && {
+        performance: monitor.getReport()
+      })
     })
 
-    return NextResponse.json(updatedItem)
-
   } catch (error) {
-    console.error('Error updating item:', error)
+    monitor.checkpoint('error_occurred')
+    
+    console.error('Error updating item:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      performance: monitor.getReport(),
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to update item' },
+      { 
+        error: 'Failed to update item',
+        details: process.env.NODE_ENV === 'development' 
+          ? error instanceof Error ? error.message : String(error)
+          : undefined
+      },
       { status: 500 }
     )
   }
 }
 
-export async function DELETE(request: NextRequest) {
+export const DELETE = withErrorHandling(async (request: NextRequest) => {
+  return withTimeout(
+    processDeleteRequest(request),
+    REQUEST_TIMEOUTS.DEFAULT,
+    'Data deletion timeout'
+  )
+}, 'Excel Data DELETE')
+
+async function processDeleteRequest(request: NextRequest) {
+  const monitor = new PerformanceMonitor()
+  monitor.checkpoint('request_start')
+  
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -284,16 +394,37 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    monitor.checkpoint('validation_complete')
+    
     await db.aggregatedItem.delete({
       where: { id }
     })
+    
+    monitor.checkpoint('item_deleted')
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ 
+      success: true,
+      ...(process.env.NODE_ENV === 'development' && {
+        performance: monitor.getReport()
+      })
+    })
 
   } catch (error) {
-    console.error('Error deleting item:', error)
+    monitor.checkpoint('error_occurred')
+    
+    console.error('Error deleting item:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      performance: monitor.getReport(),
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to delete item' },
+      { 
+        error: 'Failed to delete item',
+        details: process.env.NODE_ENV === 'development' 
+          ? error instanceof Error ? error.message : String(error)
+          : undefined
+      },
       { status: 500 }
     )
   }

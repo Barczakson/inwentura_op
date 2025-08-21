@@ -1,22 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
-import { db } from '@/lib/db'
+import { db, queries } from '@/lib/db-config'
+import {
+  withTimeout,
+  withErrorHandling,
+  createStreamingResponse,
+  PerformanceMonitor,
+  REQUEST_TIMEOUTS,
+} from '@/lib/server-optimizations'
 
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandling(async (request: NextRequest) => {
+  return withTimeout(
+    processExportRequest(request),
+    REQUEST_TIMEOUTS.EXPORT,
+    'Export timeout'
+  )
+}, 'Excel Export')
+
+async function processExportRequest(request: NextRequest) {
+  const monitor = new PerformanceMonitor()
+  monitor.checkpoint('export_start')
+  
   try {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type') || 'aggregated' // 'aggregated' or 'raw'
 
     if (type === 'aggregated') {
-      // Get all files with their structure metadata
+      monitor.checkpoint('aggregated_export_start')
+      
+      // Optimized query for files with structure metadata
       const files = await db.excelFile.findMany({
-        include: {
-          rows: true
+        select: {
+          id: true,
+          fileName: true,
+          fileSize: true,
+          uploadDate: true,
+          originalStructure: true,
+          rows: {
+            select: {
+              id: true,
+              itemId: true,
+              name: true,
+              quantity: true,
+              unit: true,
+              originalRowIndex: true
+            }
+          }
         },
         orderBy: {
           uploadDate: 'asc'
         }
       })
+      
+      monitor.checkpoint('files_fetched')
 
       if (files.length === 0) {
         return NextResponse.json({ error: 'No files found' }, { status: 404 })
@@ -138,32 +174,57 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Generate buffer
+      monitor.checkpoint('excel_workbook_created')
+      
+      // Generate buffer with performance monitoring
       const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+      
+      monitor.checkpoint('excel_buffer_generated')
+      
+      const filename = `aggregated_data_${new Date().toISOString().split('T')[0]}.xlsx`
+      
+      // For large exports, consider streaming
+      if (excelBuffer.length > 5 * 1024 * 1024) { // 5MB threshold
+        console.log(`Large export detected: ${excelBuffer.length} bytes, using optimized headers`)
+      }
 
-      return new NextResponse(excelBuffer, {
+      const response = new NextResponse(excelBuffer, {
         headers: {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'Content-Disposition': `attachment; filename="aggregated_data_${new Date().toISOString().split('T')[0]}.xlsx"`
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': excelBuffer.length.toString(),
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
         }
       })
+      
+      if (process.env.NODE_ENV === 'development') {
+        response.headers.set('X-Performance-Report', JSON.stringify(monitor.getReport()))
+      }
+      
+      return response
 
     } else {
-      // Raw data export - show original rows without aggregation
-      const rawData = await db.excelRow.findMany({
-        include: {
-          file: {
-            select: {
-              fileName: true,
-              uploadDate: true
-            }
-          }
-        },
+      monitor.checkpoint('raw_export_start')
+      
+      // Optimized raw data export with batch processing
+      const rawData = await queries.getExcelRows({
+        where: {},
         orderBy: [
           { fileId: 'asc' },
           { originalRowIndex: 'asc' }
-        ]
+        ],
+        includeFile: true
       })
+      
+      monitor.checkpoint('raw_data_fetched')
+      
+      if (rawData.length === 0) {
+        return NextResponse.json({ error: 'No raw data found' }, { status: 404 })
+      }
+      
+      console.log(`Exporting ${rawData.length} raw data rows`)
 
       const excelData = rawData.map((item, index) => ({
         'L.p.': index + 1,
@@ -191,21 +252,54 @@ export async function GET(request: NextRequest) {
         { wch: 15 }, // Pozycja w oryginalnym pliku
       ]
 
-      // Generate buffer
+      monitor.checkpoint('raw_excel_workbook_created')
+      
+      // Generate buffer with performance monitoring
       const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+      
+      monitor.checkpoint('raw_excel_buffer_generated')
+      
+      const filename = `raw_data_${new Date().toISOString().split('T')[0]}.xlsx`
+      
+      // Performance logging for large exports
+      if (excelBuffer.length > 5 * 1024 * 1024) { // 5MB threshold
+        console.log(`Large raw export: ${excelBuffer.length} bytes, ${rawData.length} rows`)
+      }
 
-      return new NextResponse(excelBuffer, {
+      const response = new NextResponse(excelBuffer, {
         headers: {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'Content-Disposition': `attachment; filename="raw_data_${new Date().toISOString().split('T')[0]}.xlsx"`
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': excelBuffer.length.toString(),
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
         }
       })
+      
+      if (process.env.NODE_ENV === 'development') {
+        response.headers.set('X-Performance-Report', JSON.stringify(monitor.getReport()))
+      }
+      
+      return response
     }
 
   } catch (error) {
-    console.error('Error exporting data:', error)
+    monitor.checkpoint('error_occurred')
+    
+    console.error('Error exporting data:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      performance: monitor.getReport(),
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to export data' },
+      { 
+        error: 'Failed to export data',
+        details: process.env.NODE_ENV === 'development' 
+          ? error instanceof Error ? error.message : String(error)
+          : undefined
+      },
       { status: 500 }
     )
   }

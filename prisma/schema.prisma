@@ -63,6 +63,9 @@ model ExcelRow {
 
   @@index([itemId, name, unit])
   @@index([fileId])
+  @@index([name]) // For name-based searches
+  @@index([createdAt]) // For time-based queries
+  @@index([fileId, originalRowIndex]) // For file-specific ordering
   @@map("excel_rows")
 }
 
@@ -79,8 +82,12 @@ model AggregatedItem {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  @@unique([itemId, name, unit])
+  @@unique([itemId, name, unit], name: "itemId_name_unit")
   @@index([itemId, name, unit])
   @@index([fileId])
+  @@index([name]) // For name-based searches
+  @@index([quantity]) // For quantity-based sorting
+  @@index([updatedAt]) // For recently updated items
+  @@index([count]) // For count-based queries
   @@map("aggregated_items")
 }
