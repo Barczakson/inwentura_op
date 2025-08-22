@@ -257,7 +257,9 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
             fileName: file.name,
             fileSize: file.size,
             rowCount,
-            originalStructure: structure
+            originalStructure: process.env.NODE_ENV === 'development' 
+              ? JSON.stringify(structure) as any
+              : structure as any
           }
         })
         
