@@ -10,8 +10,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model User {
@@ -42,9 +42,9 @@ model ExcelFile {
   fileSize         Int
   rowCount         Int?     @default(0)
   uploadDate       DateTime @default(now())
-  originalStructure Json?   // JSON supported by PostgreSQL
-  columnMapping    Json?    // Applied column mapping for this file
-  detectedHeaders  Json?    // Headers detected in this file
+  originalStructure String?   // Store as String for SQLite compatibility
+  columnMapping    String?    // Applied column mapping for this file
+  detectedHeaders  String?    // Headers detected in this file
   rows             ExcelRow[]
   aggregated       AggregatedItem[]
 
@@ -99,8 +99,8 @@ model ColumnMapping {
   name        String   // User-friendly name for this mapping
   description String?  // Optional description
   isDefault   Boolean  @default(false)
-  mapping     Json     // Column mapping configuration
-  headers     Json?    // Sample headers this mapping was created for
+  mapping     String     // Column mapping configuration (stored as JSON string)
+  headers     String?    // Sample headers this mapping was created for
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
