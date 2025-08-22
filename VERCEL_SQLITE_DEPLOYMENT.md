@@ -37,12 +37,22 @@ git push origin main
 ### Krok 3: Ustaw nowe zmienne środowiskowe
 W Vercel Dashboard → Settings → Environment Variables dodaj:
 
-**Production & Preview & Development:**
+**Production Environment:**
 ```
-DATABASE_URL = file:./prisma/production.db
+DATABASE_URL = file:/tmp/production.db
 ```
 
-**Opcjonalnie (jeśli chcesz):**
+**Preview Environment:**
+```
+DATABASE_URL = file:/tmp/preview.db
+```
+
+**Development Environment:**
+```
+DATABASE_URL = file:./prisma/dev.db
+```
+
+**Opcjonalnie (wszystkie środowiska):**
 ```
 NEXT_TELEMETRY_DISABLED = 1
 ```

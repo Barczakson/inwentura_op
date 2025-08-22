@@ -6,7 +6,7 @@
 
 generator client {
   provider = "prisma-client-js"
-  previewFeatures = ["driverAdapters"] // For Neon/Vercel Postgres
+  previewFeatures = ["driverAdapters"] // For Turso/LibSQL
 }
 
 datasource db {

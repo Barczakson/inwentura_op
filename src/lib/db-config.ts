@@ -30,9 +30,6 @@ export const db = globalForPrisma.prisma ?? new PrismaClient({
     },
   ] : ['error'],
   
-  // Connection pool optimization
-  datasources: {},
-  
   // Error handling
   errorFormat: process.env.NODE_ENV === 'development' ? 'pretty' : 'minimal',
 })
