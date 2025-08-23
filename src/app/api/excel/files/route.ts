@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { kvDB } from '@/lib/kv-adapter'
 
 export async function GET(request: NextRequest) {
   try {
-    const files = await db.excelFile.findMany({
-      orderBy: {
-        uploadDate: 'desc'
-      }
-    })
+    const files = await kvDB.getFiles()
 
     const formattedFiles = files.map(file => ({
       id: file.id,
       name: file.fileName,
       size: file.fileSize,
-      uploadDate: file.uploadDate.toISOString(),
+      uploadDate: file.uploadDate,
       rowCount: file.rowCount
     }))
 
