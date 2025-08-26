@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { kvDB } from '@/lib/kv-adapter'
+import { db, queries } from '@/lib/db-config'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,41 +10,38 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
 
-    // Get aggregated data
-    let aggregatedData = await kvDB.getAggregatedItems()
+    // Build where clause for search and fileId
+    const where: any = {}
     
-    // Filter by search if provided
     if (search) {
-      aggregatedData = aggregatedData.filter(item =>
-        item.name.toLowerCase().includes(search.toLowerCase()) ||
-        (item.itemId && item.itemId.toLowerCase().includes(search.toLowerCase()))
-      )
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { itemId: { contains: search, mode: 'insensitive' } }
+      ]
     }
-
-    // Filter by file if specified
+    
     if (fileId) {
-      aggregatedData = aggregatedData.filter(item => {
-        if (item.fileId === fileId) return true
-        if (item.sourceFiles) {
-          try {
-            const sourceFileIds = JSON.parse(item.sourceFiles)
-            return sourceFileIds.includes(fileId)
-          } catch {
-            return false
-          }
-        }
-        return false
-      })
+      where.OR = [
+        { fileId: fileId },
+        { sourceFiles: { path: ['$[*]'], equals: fileId } } // JSON search for PostgreSQL
+      ]
     }
 
-    // Pagination
-    const total = aggregatedData.length
+    // Get total count
+    const total = await db.aggregatedItem.count({ where })
     const totalPages = Math.ceil(total / limit)
     const offset = (page - 1) * limit
-    const paginatedData = aggregatedData.slice(offset, offset + limit)
+
+    // Get paginated data
+    const aggregatedData = await queries.getAggregatedItems({
+      where,
+      orderBy: { name: 'asc' },
+      skip: offset,
+      take: limit
+    })
 
     const response: any = {
-      aggregated: paginatedData,
+      aggregated: aggregatedData,
       pagination: {
         page,
         limit,
@@ -57,17 +54,23 @@ export async function GET(request: NextRequest) {
 
     // Include raw data if requested
     if (includeRaw) {
-      const rawData = await kvDB.getRows(fileId || undefined)
+      const rawWhere: any = fileId ? { fileId } : {}
       
-      let filteredRawData = rawData
       if (search) {
-        filteredRawData = rawData.filter(row =>
-          row.name.toLowerCase().includes(search.toLowerCase()) ||
-          (row.itemId && row.itemId.toLowerCase().includes(search.toLowerCase()))
-        )
+        rawWhere.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { itemId: { contains: search, mode: 'insensitive' } }
+        ]
       }
       
-      response.raw = filteredRawData.slice(offset, offset + limit)
+      const rawData = await queries.getExcelRows({
+        where: rawWhere,
+        orderBy: { originalRowIndex: 'asc' },
+        skip: offset,
+        take: limit
+      })
+      
+      response.raw = rawData
     }
 
     return NextResponse.json(response)
@@ -92,14 +95,13 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const updatedItem = await kvDB.updateAggregatedItem(id, quantity)
-    
-    if (!updatedItem) {
-      return NextResponse.json(
-        { error: 'Item not found' },
-        { status: 404 }
-      )
-    }
+    const updatedItem = await db.aggregatedItem.update({
+      where: { id },
+      data: { 
+        quantity,
+        updatedAt: new Date()
+      }
+    })
 
     return NextResponse.json(updatedItem)
 
@@ -124,7 +126,9 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await kvDB.deleteAggregatedItem(id)
+    await db.aggregatedItem.delete({
+      where: { id }
+    })
 
     return NextResponse.json({ success: true })
 

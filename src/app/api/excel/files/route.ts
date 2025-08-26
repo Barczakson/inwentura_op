@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { kvDB } from '@/lib/kv-adapter'
+import { db, queries } from '@/lib/db-config'
 
 export async function GET(request: NextRequest) {
   try {
-    const files = await kvDB.getFiles()
+    const files = await queries.getExcelFiles({
+      orderBy: { uploadDate: 'desc' },
+      includeStats: true
+    })
 
     const formattedFiles = files.map(file => ({
       id: file.id,
@@ -56,7 +59,9 @@ export async function DELETE(request: NextRequest) {
     for (const item of allAggregatedItems) {
       if (item.sourceFiles) {
         try {
-          const sourceFileIds = JSON.parse(item.sourceFiles) as string[]
+          const sourceFileIds = Array.isArray(item.sourceFiles) 
+            ? item.sourceFiles as string[] 
+            : []
           
           // Check if this item contains the file we're deleting
           if (sourceFileIds.includes(fileId)) {
@@ -72,7 +77,7 @@ export async function DELETE(request: NextRequest) {
               await db.aggregatedItem.update({
                 where: { id: item.id },
                 data: {
-                  sourceFiles: JSON.stringify(updatedSourceFileIds),
+                  sourceFiles: updatedSourceFileIds,
                   quantity: Math.max(0, item.quantity - quantityToSubtract), // Ensure non-negative
                   count: Math.max(0, (item.count || 0) - rowsToDelete.filter(
                     row => (row.itemId || null) === (item.itemId || null) && 

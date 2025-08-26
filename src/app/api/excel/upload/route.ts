@@ -257,9 +257,7 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
             fileName: file.name,
             fileSize: file.size,
             rowCount,
-            originalStructure: process.env.NODE_ENV === 'development' 
-              ? JSON.stringify(structure) as any
-              : structure as any
+            originalStructure: structure
           }
         })
         
@@ -289,7 +287,7 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
       const aggregatedArray = Array.from(aggregatedData.values())
       aggregatedWithSourceFiles = aggregatedArray.map(item => ({
         ...item,
-        sourceFiles: JSON.stringify([fileId]),
+        sourceFiles: [fileId],
         count: item.sourceRowIds.length,
         fileId: fileId
       }))
@@ -307,13 +305,9 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
 
         if (existingItem) {
           // Update existing aggregated item
-          let existingSourceFiles: string[] = []
-          try {
-            existingSourceFiles = existingItem.sourceFiles ? JSON.parse(existingItem.sourceFiles) : []
-          } catch (error) {
-            console.warn('Failed to parse existing sourceFiles:', error)
-            existingSourceFiles = []
-          }
+          const existingSourceFiles: string[] = Array.isArray(existingItem.sourceFiles) 
+            ? existingItem.sourceFiles as string[] 
+            : []
           
           if (!existingSourceFiles.includes(fileId)) {
             existingSourceFiles.push(fileId)
@@ -331,7 +325,7 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
               quantity: {
                 increment: item.quantity
               },
-              sourceFiles: JSON.stringify(existingSourceFiles),
+              sourceFiles: existingSourceFiles,
               count: existingItem.count ? existingItem.count + item.count : item.count
             }
           })
