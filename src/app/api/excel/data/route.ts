@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, queries } from '@/lib/db-config'
+import { ensureMigrationsRun } from '@/lib/migrate'
 
 export async function GET(request: NextRequest) {
   try {
+    // Ensure database is ready (runtime migration check)
+    await ensureMigrationsRun()
+    
     const { searchParams } = new URL(request.url)
     const includeRaw = searchParams.get('includeRaw') === 'true'
     const fileId = searchParams.get('fileId')

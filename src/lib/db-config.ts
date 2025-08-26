@@ -35,10 +35,11 @@ export const db = globalForPrisma.prisma ?? new PrismaClient({
 })
 
 // Performance monitoring for database queries
-// Note: Database event logging disabled for SQLite compatibility
-// Query monitoring would be available in production with PostgreSQL
-if (process.env.NODE_ENV === 'development') {
-  console.log('Database monitoring disabled for SQLite development environment')
+if (process.env.NODE_ENV === 'development' && DATABASE_CONFIG.query_logging) {
+  db.$on('query' as any, (e: any) => {
+    console.log('Query: ' + e.query)
+    console.log('Duration: ' + e.duration + 'ms')
+  })
 }
 
 // Connection pool management
@@ -67,20 +68,20 @@ export async function withTransaction<T>(
   options: {
     maxWait?: number
     timeout?: number
-    isolationLevel?: 'Serializable' // SQLite only supports Serializable isolation level
+    isolationLevel?: 'ReadUncommitted' | 'ReadCommitted' | 'RepeatableRead' | 'Serializable'
   } = {}
 ): Promise<T> {
   const startTime = performance.now()
   
   try {
-    // SQLite transaction options are more limited than PostgreSQL
+    // PostgreSQL transaction options for Vercel/Supabase
     const transactionOptions: any = {
       maxWait: options.maxWait || 5000, // 5 seconds
       timeout: options.timeout || 10000, // 10 seconds
     }
     
-    // Only add isolationLevel if it's Serializable (SQLite default)
-    if (options.isolationLevel === 'Serializable') {
+    // PostgreSQL supports all isolation levels
+    if (options.isolationLevel) {
       transactionOptions.isolationLevel = options.isolationLevel
     }
     
@@ -237,7 +238,7 @@ export const queries = {
       const batch = rows.slice(i, i + batchSize)
       const result = await db.excelRow.createMany({
         data: batch,
-        // Note: skipDuplicates not available in SQLite
+        skipDuplicates: true, // PostgreSQL supports skipDuplicates
       })
       results.push(result)
       
