@@ -255,7 +255,7 @@ export const queries = {
             await new Promise(resolve => setImmediate(resolve))
           }
         } catch (error) {
-          console.warn(`Failed to create row ${i}:`, error.message)
+          console.warn(`Failed to create row ${i}:`, error instanceof Error ? error.message : String(error))
         }
       }
       results.push({ count })
