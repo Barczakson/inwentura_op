@@ -16,19 +16,44 @@ export async function GET(request: NextRequest) {
 
     // Build where clause for search and fileId
     const where: any = {}
+    const conditions: any[] = []
+    const isSQLite = process.env.DATABASE_URL?.includes('file:') || process.env.DATABASE_URL?.includes('sqlite')
     
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { itemId: { contains: search, mode: 'insensitive' } }
-      ]
+      // SQLite doesn't support case insensitive mode, PostgreSQL does
+      const searchOptions = isSQLite 
+        ? { contains: search } 
+        : { contains: search, mode: 'insensitive' as const }
+      
+      conditions.push({
+        OR: [
+          { name: searchOptions },
+          { itemId: searchOptions }
+        ]
+      })
     }
     
     if (fileId) {
-      where.OR = [
-        { fileId: fileId },
-        { sourceFiles: { path: ['$[*]'], equals: fileId } } // JSON search for PostgreSQL
-      ]
+      // Handle fileId search - different approach for SQLite vs PostgreSQL
+      if (isSQLite) {
+        // For SQLite, just match fileId directly (simpler approach)
+        conditions.push({ fileId: fileId })
+      } else {
+        // For PostgreSQL, use JSON path search for sourceFiles array
+        conditions.push({
+          OR: [
+            { fileId: fileId },
+            { sourceFiles: { path: ['$[*]'], equals: fileId } }
+          ]
+        })
+      }
+    }
+    
+    // Combine all conditions with AND
+    if (conditions.length === 1) {
+      Object.assign(where, conditions[0])
+    } else if (conditions.length > 1) {
+      where.AND = conditions
     }
 
     // Get total count
@@ -61,9 +86,15 @@ export async function GET(request: NextRequest) {
       const rawWhere: any = fileId ? { fileId } : {}
       
       if (search) {
+        // SQLite doesn't support case insensitive mode, PostgreSQL does
+        const isSQLite = process.env.DATABASE_URL?.includes('file:') || process.env.DATABASE_URL?.includes('sqlite')
+        const searchOptions = isSQLite 
+          ? { contains: search } 
+          : { contains: search, mode: 'insensitive' as const }
+          
         rawWhere.OR = [
-          { name: { contains: search, mode: 'insensitive' } },
-          { itemId: { contains: search, mode: 'insensitive' } }
+          { name: searchOptions },
+          { itemId: searchOptions }
         ]
       }
       
