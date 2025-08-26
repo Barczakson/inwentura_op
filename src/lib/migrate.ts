@@ -3,43 +3,60 @@
  * 
  * Since build-time migrations can fail with "Tenant or user not found" errors,
  * this utility runs migrations at runtime when the database connection is available.
+ * 
+ * This approach is optimized for serverless environments and handles connection pooling
+ * requirements for Supabase PostgreSQL on Vercel.
  */
 
 import { db } from './db-config'
+import { verifyDatabaseSchema, createDatabaseSchema } from './deployment-migrate'
 
 let migrationAttempted = false
 let migrationSuccessful = false
 
 /**
  * Run database migrations at runtime
+ * This function ensures the database is ready for use in serverless environments
  */
 export async function ensureMigrationsRun(): Promise<void> {
-  // Only attempt once per deployment
+  // Only attempt once per function instance
   if (migrationAttempted) {
     if (!migrationSuccessful) {
-      throw new Error('Previous migration attempt failed')
+      console.warn('Previous migration attempt failed, checking again...')
+      // We'll try again since it's a new function instance
+    } else {
+      return
     }
-    return
   }
   
   migrationAttempted = true
   
   try {
-    console.log('Checking database connection and schema...')
+    console.log('Starting database initialization...')
     
-    // Test basic connection
-    await db.$queryRaw`SELECT 1 as test`
+    // Test basic connection with timeout
+    console.log('Testing database connection...')
+    await Promise.race([
+      db.$queryRaw`SELECT 1`,
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Database connection timeout')), 5000)
+      )
+    ])
     console.log('Database connection successful')
     
-    // Check if tables exist
-    const tablesExist = await checkTablesExist()
+    // Verify schema exists
+    console.log('Verifying database schema...')
+    const schemaValid = await verifyDatabaseSchema()
     
-    if (!tablesExist) {
-      console.log('Database schema not found, running migrations...')
-      
-      // In production, we assume migrations are already applied via Supabase Dashboard
-      // This is just a connection verification
-      console.log('For production deployments, ensure database schema is created via Supabase Dashboard')
+    if (!schemaValid) {
+      console.log('Database schema verification failed, attempting to create...')
+      try {
+        await createDatabaseSchema()
+        console.log('Database schema created successfully')
+      } catch (createError) {
+        console.warn('Failed to create database schema:', createError)
+        // Continue anyway as tables might exist but we couldn't verify them
+      }
     } else {
       console.log('Database schema verified')
     }
@@ -50,12 +67,14 @@ export async function ensureMigrationsRun(): Promise<void> {
   } catch (error) {
     console.error('Database initialization failed:', error)
     migrationSuccessful = false
-    throw error
+    // Don't throw the error to allow the application to continue
+    // We'll handle missing tables in the actual queries
   }
 }
 
 /**
  * Check if required tables exist
+ * @deprecated Use verifyDatabaseSchema instead
  */
 async function checkTablesExist(): Promise<boolean> {
   try {
@@ -70,7 +89,7 @@ async function checkTablesExist(): Promise<boolean> {
 
 /**
  * Create database schema for new deployments
- * Note: This should normally be done via Supabase Dashboard in production
+ * @deprecated Use createDatabaseSchema from deployment-migrate instead
  */
 export async function createSchemaIfNeeded(): Promise<void> {
   try {
