@@ -165,6 +165,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(response)
 
   } catch (error) {
+    // Parse URL parameters for error logging
+    const { searchParams } = new URL(request.url)
+    const includeRaw = searchParams.get('includeRaw') === 'true'
+    const fileId = searchParams.get('fileId')
+    const search = searchParams.get('search') || ''
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const sortBy = searchParams.get('sortBy') || 'name'
+    const sortDirection = searchParams.get('sortDirection') || 'asc'
+    
     console.error('Error fetching data:', {
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : 'No stack trace',
