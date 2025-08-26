@@ -22,6 +22,7 @@ Key features include:
 - ✅ Unit conversion system for improved UX
 - ✅ Manual data entry for additional items
 - ✅ Cloud deployment optimized for Vercel + Supabase
+- ✅ Robust error handling with comprehensive error types and user-friendly messages
 
 ## Technology Stack
 
@@ -55,6 +56,7 @@ src/
 │   ├── unit-conversion.ts # Unit conversion utilities
 │   ├── db-config.ts    # PostgreSQL-optimized Prisma configuration
 │   ├── migrate.ts      # Runtime migration system for Vercel deployment
+│   ├── error-handler.ts # Standardized error handling utilities
 │   └── server-optimizations.ts # Connection pooling and performance utilities
 └── prisma/             # Prisma schema and migrations
 ```
@@ -63,14 +65,16 @@ src/
 
 1.  **`server.ts`**: Custom Next.js server with Socket.IO integration.
 2.  **`src/app/page.tsx`**: Main application page with file upload, data display, and management features.
-3.  **`src/components/data-table.tsx`**: Reusable data table component with sorting, filtering, and inline editing.
-4.  **`src/lib/unit-conversion.ts`**: Utility functions for converting and formatting units (weight/volume).
-5.  **`src/lib/db-config.ts`**: PostgreSQL-optimized Prisma configuration with connection pooling.
-6.  **`src/lib/migrate.ts`**: Runtime migration system for Vercel deployment.
-7.  **`src/lib/server-optimizations.ts`**: Connection pooling and performance utilities.
-8.  **`prisma/schema.prisma`**: Prisma schema defining the database models.
-9.  **`next.config.ts`**: Next.js configuration with optimizations.
-10. **`package.json`**: Project dependencies and scripts.
+3.  **`src/app/comparison/page.tsx`**: Monthly comparison page for analyzing inventory changes.
+4.  **`src/components/data-table.tsx`**: Reusable data table component with sorting, filtering, and inline editing.
+5.  **`src/lib/unit-conversion.ts`**: Utility functions for converting and formatting units (weight/volume).
+6.  **`src/lib/db-config.ts`**: PostgreSQL-optimized Prisma configuration with connection pooling.
+7.  **`src/lib/migrate.ts`**: Runtime migration system for Vercel deployment.
+8.  **`src/lib/error-handler.ts`**: Standardized error handling with multiple error types and user-friendly messages.
+9.  **`src/lib/server-optimizations.ts`**: Connection pooling and performance utilities.
+10. **`prisma/schema.prisma`**: Prisma schema defining the database models.
+11. **`next.config.ts`**: Next.js configuration with optimizations.
+12. **`package.json`**: Project dependencies and scripts.
 
 ## Building and Running
 
@@ -101,6 +105,7 @@ src/
 - Includes unit conversion logic for displaying quantities in appropriate units.
 - Uses Jest for testing.
 - Follows a component-based architecture for UI development.
+- Implements standardized error handling with the error-handler utility.
 
 ## API Routes
 
@@ -147,6 +152,7 @@ Tests are written using Jest and React Testing Library. Configuration files incl
 - **SSL Configuration:** Proper `sslmode=require` for Supabase connections
 - **TypeScript Compatibility:** All SQLite references converted to PostgreSQL
 - **Performance Optimized:** Runtime checks ensure database availability
+- **Error Handling:** Robust error handling system with multiple error types
 
 ## Socket.IO Integration (Production-Ready)
 
@@ -166,6 +172,7 @@ Tests are written using Jest and React Testing Library. Configuration files incl
 - **State Management:** Zustand for client state, TanStack Query for server state
 - **Database Operations:** Connection pooling with runtime migration checks
 - **Performance:** Built-in monitoring and optimization utilities
+- **Standardized Errors:** Consistent error handling across the application
 
 ## Important Deployment Notes
 
@@ -176,3 +183,11 @@ Tests are written using Jest and React Testing Library. Configuration files incl
 - **Connection Strings:** Use transaction pooler (port 6543) and session pooler (port 5432)
 - **Runtime Migrations:** Database verification happens at API route level
 - **Environment Variables:** Properly configured for Vercel with sensitive data protection
+
+## Recent Fixes and Improvements
+
+### Error Handling System
+- **Enhanced Error Handler**: Improved `showErrorToast` and `handleAsyncOperation` functions with better validation
+- **Defensive Programming**: Added checks to prevent runtime errors when handling error objects
+- **Fallback Handling**: Added fallback mechanisms for unknown error types
+- **Better Logging**: Enhanced error logging for debugging purposes

@@ -7,6 +7,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { BarChart, ArrowLeft, FileSpreadsheet, Check, Plus } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
+import { 
+  handleApiResponse, 
+  handleAsyncOperation, 
+  showErrorToast, 
+  showSuccessToast,
+  createError,
+  ErrorType
+} from '@/lib/error-handler'
 import Link from 'next/link'
 
 interface AggregatedItem {

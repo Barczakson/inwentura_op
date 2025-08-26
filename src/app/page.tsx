@@ -41,7 +41,8 @@ import {
   showErrorToast, 
   showSuccessToast,
   createError,
-  ErrorType
+  ErrorType,
+  parseHttpError
 } from '@/lib/error-handler'
 import Link from 'next/link'
 

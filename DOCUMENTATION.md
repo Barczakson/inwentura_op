@@ -333,54 +333,109 @@ Add manual inventory entry.
 
 ## 🗄️ Database Schema
 
+The application uses Prisma ORM with support for both SQLite (development) and PostgreSQL (production). The schema includes 6 primary models:
+
 ### Prisma Models
 
 ```prisma
 model User {
   id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  content   String?
+  published Boolean  @default(false)
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("posts")
 }
 
 model ExcelFile {
-  id            String            @id @default(cuid())
-  name          String
-  size          Int
-  uploadDate    DateTime          @default(now())
-  rows          ExcelRow[]
-  aggregatedItems AggregatedItem[]
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id               String   @id @default(cuid())
+  fileName         String
+  fileSize         Int
+  rowCount         Int?     @default(0)
+  uploadDate       DateTime @default(now())
+  originalStructure Json?   // JSON for PostgreSQL
+  columnMapping    Json?    // Applied column mapping for this file
+  detectedHeaders  Json?    // Headers detected in this file
+  rows             ExcelRow[]
+  aggregated       AggregatedItem[]
+
+  @@index([uploadDate])
+  @@map("excel_files")
 }
 
 model ExcelRow {
-  id        String    @id @default(cuid())
-  itemId    String?
-  name      String
-  quantity  Float
-  unit      String
-  fileId    String
-  file      ExcelFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  itemId           String?
+  name             String
+  quantity         Float
+  unit             String
+  originalRowIndex Int?      // Position in original Excel file
+  fileId           String
+  file             ExcelFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now())
 
-  @@index([fileId])
   @@index([itemId, name, unit])
+  @@index([fileId])
+  @@index([name]) // For name-based searches
+  @@index([createdAt]) // For time-based queries
+  @@index([fileId, originalRowIndex]) // For file-specific ordering
+  @@map("excel_rows")
 }
 
 model AggregatedItem {
-  id        String    @id @default(cuid())
-  itemId    String?
-  name      String
-  quantity  Float
-  unit      String
-  fileId    String?
-  file      ExcelFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id          String     @id @default(cuid())
+  itemId      String?
+  name        String
+  quantity    Float
+  unit        String
+  fileId      String?
+  file        ExcelFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  sourceFiles Json?      // JSON array of file IDs
+  count       Int?       @default(1)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
-  @@unique([itemId, name, unit])
+  @@unique([itemId, name, unit], name: "itemId_name_unit")
+  @@index([itemId, name, unit])
   @@index([fileId])
+  @@index([name]) // For name-based searches
+  @@index([quantity]) // For quantity-based sorting
+  @@index([updatedAt]) // For recently updated items
+  @@index([count]) // For count-based queries
+  @@map("aggregated_items")
+}
+
+model ColumnMapping {
+  id          String   @id @default(cuid())
+  name        String   // User-friendly name for this mapping
+  description String?  // Optional description
+  isDefault   Boolean  @default(false)
+  mapping     Json     // Column mapping configuration as JSON
+  headers     Json?    // Sample headers this mapping was created for
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Track usage
+  usageCount  Int      @default(0)
+  lastUsed    DateTime?
+  
+  @@index([isDefault])
+  @@index([usageCount])
+  @@index([lastUsed])
+  @@map("column_mappings")
 }
 ```
 
@@ -388,6 +443,44 @@ model AggregatedItem {
 - **ExcelFile** → **ExcelRow** (1:many, cascade delete)
 - **ExcelFile** → **AggregatedItem** (1:many, cascade delete)
 - **Unique Constraint**: AggregatedItem(itemId, name, unit)
+- **Indexes**: Multiple indexes for performance optimization
+
+### Environment-Specific Configurations
+
+#### Local Development (.env.local)
+Uses SQLite for simplicity:
+```
+DATABASE_URL="file:./prisma/dev.db"
+DIRECT_URL="file:./prisma/dev.db"
+```
+
+#### Production Deployment (.env.production)
+Uses PostgreSQL with Vercel + Supabase optimization:
+```
+# Transaction pooler (port 6543) - for serverless functions on Vercel
+DATABASE_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&pool_timeout=20&sslmode=require"
+
+# Session pooler (port 5432) - for migrations
+DIRECT_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].pooler.supabase.com:5432/postgres?sslmode=require"
+```
+
+### Migration Commands
+```bash
+# Generate Prisma client
+npm run db:generate
+
+# Apply migrations to development database
+npm run db:push
+
+# Deploy migrations to production
+npm run db:deploy
+
+# Reset development database
+npm run db:reset
+
+# Open Prisma Studio (database GUI)
+npm run db:studio
+```
 
 ---
 
@@ -438,9 +531,14 @@ npm run db:seed      # Seed database
 
 ### Environment Variables
 ```env
-# Database
-DATABASE_URL="sqlite:./dev.db"                    # Development
-DATABASE_URL="postgresql://user:pass@host/db"     # Production
+# Database - SQLite for Development
+DATABASE_URL="file:./prisma/dev.db"
+DIRECT_URL="file:./prisma/dev.db"
+
+# Database - PostgreSQL for Production
+# Uncomment and update these for production:
+# DATABASE_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&pool_timeout=20&sslmode=require"
+# DIRECT_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].pooler.supabase.com:5432/postgres?sslmode=require"
 
 # Next.js
 NEXTAUTH_URL="http://localhost:3000"
@@ -449,6 +547,35 @@ NEXTAUTH_SECRET="your-secret-key"
 # Optional
 NODE_ENV="development"
 PORT=3000
+```
+
+### Database Development Commands
+```bash
+# Development database commands
+npm run db:generate     # Generate Prisma client
+npm run db:push         # Push schema changes to development DB
+npm run db:reset        # Reset development database
+npm run db:studio       # Open Prisma Studio (GUI)
+npm run db:seed         # Seed development database
+
+# Production database commands
+npm run db:deploy       # Deploy migrations to production
+npm run db:migrate      # Run migrations
+```
+
+### Database Testing
+```bash
+# Run database-specific tests
+npm run test:api -- --testPathPatterns=db
+
+# Run all integration tests
+npm run test:integration
+
+# Run database connection tests
+npm run test:api -- --testPathPatterns=database-connection
+
+# Run database schema tests
+npm run test:api -- --testPathPatterns=database-schema
 ```
 
 ### Project Structure
@@ -466,7 +593,9 @@ src/
 │   ├── data-charts.tsx   # Charts component
 │   └── edit-item-dialog.tsx
 ├── lib/                   # Utility libraries
-│   ├── prisma.ts         # Database client
+│   ├── db-config.ts      # Database configuration and connection
+│   ├── server-optimizations.ts # Server performance optimizations
+│   ├── migrate.ts        # Runtime migration utilities
 │   ├── socket.ts         # Socket.IO setup
 │   └── unit-conversion.ts # Unit conversion utilities
 ├── hooks/                 # Custom React hooks
@@ -479,6 +608,12 @@ prisma/
 
 __tests__/                # Test files
 ├── integration/         # Integration tests
+│   ├── database-connection.test.ts   # Database connection tests
+│   ├── database-requests.test.ts    # Database request tests
+│   ├── db-config.test.ts            # Database configuration tests
+│   ├── db-connection.test.ts        # Database connection verification tests
+│   ├── db-schema.test.ts            # Database schema verification tests
+│   └── column-mapping-flow.test.ts  # Column mapping integration tests
 └── simple.test.ts       # Basic tests
 
 Configuration files:
@@ -505,8 +640,12 @@ npm run start
 
 ### Environment Setup
 ```env
-# Production database
-DATABASE_URL="postgresql://user:password@host:5432/database"
+# Production database - PostgreSQL with Supabase
+# Transaction pooler (port 6543) - for serverless functions on Vercel
+DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&pool_timeout=20&sslmode=require"
+
+# Session pooler (port 5432) - for migrations (IPv4 compatible, NOT direct connection)
+DIRECT_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].pooler.supabase.com:5432/postgres?sslmode=require"
 
 # Security
 NEXTAUTH_URL="https://your-domain.com"
@@ -515,6 +654,44 @@ NEXTAUTH_SECRET="secure-random-string"
 # Performance
 NODE_ENV="production"
 ```
+
+### Database Setup for Production
+
+1. **Create Supabase Project**:
+   - Sign up at https://supabase.com/
+   - Create a new project
+   - Note your project credentials
+
+2. **Configure Environment Variables**:
+   ```bash
+   # In Vercel dashboard, add these environment variables:
+   DATABASE_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&pool_timeout=20&sslmode=require"
+   DIRECT_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].pooler.supabase.com:5432/postgres?sslmode=require"
+   ```
+
+3. **Run Database Migrations**:
+   ```bash
+   # Generate Prisma client
+   npm run db:generate
+   
+   # Deploy migrations to production database
+   npm run db:deploy
+   ```
+
+4. **Verify Database Schema**:
+   ```bash
+   # Open Prisma Studio to verify tables
+   npm run db:studio
+   ```
+
+### Database Connection Parameters Explained
+
+- **pgbouncer=true**: Enables connection pooling for Vercel serverless functions
+- **connection_limit=1**: Limits connections to 1 per serverless function (required for Vercel)
+- **pool_timeout=20**: Sets connection pool timeout to 20 seconds
+- **sslmode=require**: Enforces SSL encryption for secure connections
+- **Transaction Pooler (6543)**: Used for application connections in serverless functions
+- **Session Pooler (5432)**: Used for database migrations
 
 ### Deployment Options
 
@@ -583,6 +760,7 @@ npx prisma generate
 **Impact**: Tests run successfully but show warnings
 **Status**: 🐛 Known Issue
 **Priority**: Low
+**Note**: This is a minor issue that doesn't affect functionality. Main application errors have been resolved.
 
 ### 4. **Memory Usage on Large Datasets**
 **Issue**: High memory consumption with 1000+ items
@@ -609,16 +787,23 @@ npx prisma generate
 **Status**: ✅ Resolved
 **Fixed In**: Current version
 
+#### 2. Error Handler Runtime Errors ✅ FIXED
+**Description**: Application crashed with "Cannot read property 'toUpperCase' of undefined" when handling API errors
+**Root Cause**: Error objects not properly validated in error handler functions
+**Fix**: Added defensive programming and validation in `showErrorToast` and `handleAsyncOperation` functions
+**Status**: ✅ Resolved
+**Fixed In**: Current version
+
 ### High Priority Bugs (P1)
 
-#### 2. Placeholder Content in Tables ✅ FIXED
+#### 3. Placeholder Content in Tables ✅ FIXED
 **Description**: Data tables showed placeholder text instead of actual data
 **Root Cause**: Hardcoded placeholder divs in render logic
 **Fix**: Replaced with proper DataTable components
 **Status**: ✅ Resolved
 **Fixed In**: Current version
 
-#### 3. Unit Conversion Edge Cases
+#### 4. Unit Conversion Edge Cases
 **Description**: Conversion fails with very small decimal values
 **Example**: 0.0001 grams shows as "0.00 g" instead of "0.1 mg"
 **Status**: 🔍 Under Investigation
@@ -677,7 +862,7 @@ const ItemValidationSchema = z.object({
 })
 ```
 
-#### 2. **Improved Error Handling**
+#### 2. **Improved Error Handling** ✅ PARTIALLY COMPLETED
 **Priority**: High
 **Effort**: Low
 **Description**:
@@ -685,6 +870,16 @@ const ItemValidationSchema = z.object({
 - Retry mechanisms for failed operations
 - Progressive error recovery
 - Error logging and monitoring
+
+**Recent Fixes**:
+- Added validation in `showErrorToast` to handle cases where `error.type` might be undefined or invalid
+- Added defensive programming in `handleAsyncOperation` to ensure error objects conform to the `AppError` interface
+- Added fallback handling for unknown error types
+- Enhanced error logging for debugging purposes
+
+**Remaining Work**:
+- Implement retry mechanisms for failed operations
+- Add progressive error recovery
 
 #### 3. **Performance Optimization**
 **Priority**: Medium
@@ -954,6 +1149,6 @@ model User {
 
 ---
 
-*Last Updated: August 15, 2025*
-*Version: 1.0.0*
+*Last Updated: August 26, 2025*
+*Version: 1.0.1*
 *Maintainer: Development Team*
