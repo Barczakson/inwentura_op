@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
+    const sortBy = searchParams.get('sortBy') || 'name'
+    const sortDirection = searchParams.get('sortDirection') || 'asc'
 
     // Build where clause for search and fileId
     const where: any = {}
@@ -56,6 +58,15 @@ export async function GET(request: NextRequest) {
       where.AND = conditions
     }
 
+    // Build order by clause with validation
+    const validSortFields = ['name', 'itemId', 'quantity', 'unit', 'createdAt', 'updatedAt']
+    const validSortDirections = ['asc', 'desc']
+    
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'name'
+    const sortDir = validSortDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc'
+    
+    const orderBy: any = { [sortField]: sortDir }
+
     // Get total count
     const total = await db.aggregatedItem.count({ where })
     const totalPages = Math.ceil(total / limit)
@@ -64,7 +75,7 @@ export async function GET(request: NextRequest) {
     // Get paginated data
     const aggregatedData = await queries.getAggregatedItems({
       where,
-      orderBy: { name: 'asc' },
+      orderBy,
       skip: offset,
       take: limit
     })
@@ -98,9 +109,14 @@ export async function GET(request: NextRequest) {
         ]
       }
       
+      // Build raw data order by clause (limited to relevant fields for raw data)
+      const rawValidSortFields = ['name', 'itemId', 'quantity', 'unit', 'originalRowIndex']
+      const rawSortField = rawValidSortFields.includes(sortBy) ? sortBy : 'originalRowIndex'
+      const rawOrderBy: any = { [rawSortField]: sortDir }
+
       const rawData = await queries.getExcelRows({
         where: rawWhere,
-        orderBy: { originalRowIndex: 'asc' },
+        orderBy: rawOrderBy,
         skip: offset,
         take: limit
       })
