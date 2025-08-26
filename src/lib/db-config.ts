@@ -76,10 +76,10 @@ export async function withTransaction<T>(
   const startTime = performance.now()
   
   try {
-    // PostgreSQL transaction options for Vercel/Supabase
+    // Transaction options optimized for SQLite/PostgreSQL
     const transactionOptions: any = {
-      maxWait: options.maxWait || 5000, // 5 seconds
-      timeout: options.timeout || 10000, // 10 seconds
+      maxWait: options.maxWait || 10000, // 10 seconds
+      timeout: options.timeout || 30000, // 30 seconds
     }
     
     // PostgreSQL supports all isolation levels
@@ -236,16 +236,46 @@ export const queries = {
   async batchCreateExcelRows(rows: any[], batchSize = 1000) {
     const results: { count: number }[] = []
     
-    for (let i = 0; i < rows.length; i += batchSize) {
-      const batch = rows.slice(i, i + batchSize)
-      const result = await db.excelRow.createMany({
-        data: batch,
-        skipDuplicates: true, // PostgreSQL supports skipDuplicates
-      })
-      results.push(result)
-      
-      // Allow event loop to process other requests
-      await new Promise(resolve => setImmediate(resolve))
+    // Check if we're using PostgreSQL (skipDuplicates supported) or SQLite (not supported)
+    const isPostgres = process.env.DATABASE_URL?.includes('postgresql') || process.env.DATABASE_URL?.includes('postgres')
+    const isSQLite = process.env.DATABASE_URL?.includes('file:') || process.env.DATABASE_URL?.includes('sqlite')
+    
+    if (isSQLite && rows.length > 100) {
+      // For SQLite with large datasets, use individual creates to avoid timeout
+      console.log(`SQLite detected with ${rows.length} rows, using individual inserts`)
+      let count = 0
+      for (let i = 0; i < rows.length; i++) {
+        try {
+          await db.excelRow.create({ data: rows[i] })
+          count++
+          
+          // Progress indicator and event loop yield every 50 items
+          if (i % 50 === 0) {
+            console.log(`Processed ${i + 1}/${rows.length} rows`)
+            await new Promise(resolve => setImmediate(resolve))
+          }
+        } catch (error) {
+          console.warn(`Failed to create row ${i}:`, error.message)
+        }
+      }
+      results.push({ count })
+    } else {
+      // Use createMany for PostgreSQL or small datasets
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize)
+        const createOptions: any = { data: batch }
+        
+        // Only add skipDuplicates for PostgreSQL
+        if (isPostgres) {
+          createOptions.skipDuplicates = true
+        }
+        
+        const result = await db.excelRow.createMany(createOptions)
+        results.push(result)
+        
+        // Allow event loop to process other requests
+        await new Promise(resolve => setImmediate(resolve))
+      }
     }
     
     return results

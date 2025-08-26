@@ -31,11 +31,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 }, 'Excel Upload')
 
 async function processUpload(request: NextRequest, monitor: PerformanceMonitor) {
+  let file: File | null = null
+  
   try {
     // console.log('File upload POST called')
     const formData = await request.formData()
     // console.log('FormData received')
-    const file = formData.get('file') as File
+    file = formData.get('file') as File
     // console.log('File extracted from FormData:', file ? 'found' : 'not found')
 
     if (!file) {
@@ -249,39 +251,34 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
     const rowCount = rowProcessor.getRowCount()
     
     if (rowCount > 0) {
-      // Use transaction for data consistency
-      const result = await withTransaction(async (tx) => {
-        // Create Excel file record with structure metadata
-        const excelFile = await tx.excelFile.create({
-          data: {
-            fileName: file.name,
-            fileSize: file.size,
-            rowCount,
-            originalStructure: structure
-          }
-        })
-        
-        monitor.checkpoint('file_record_created')
-
-        // Process rows in chunks to avoid memory issues
-        const rowsWithFileId = await rowProcessor.processInChunks(async (chunk) => {
-          return chunk.map(row => ({
-            ...row,
-            fileId: excelFile.id
-          }))
-        })
-        
-        monitor.checkpoint('rows_processed')
-
-        // Batch insert with optimized performance
-        await queries.batchCreateExcelRows(rowsWithFileId.flat())
-        
-        monitor.checkpoint('rows_saved')
-        
-        return excelFile
+      // Create Excel file record first (without transaction for testing)
+      const excelFile = await db.excelFile.create({
+        data: {
+          fileName: file.name,
+          fileSize: file.size,
+          rowCount,
+          originalStructure: structure
+        }
       })
       
-      fileId = result.id
+      monitor.checkpoint('file_record_created')
+      fileId = excelFile.id
+
+      // Process rows in chunks to avoid memory issues
+      const rowsWithFileId = await rowProcessor.processInChunks(async (chunk) => {
+        return chunk.map(row => ({
+          ...row,
+          fileId: excelFile.id
+        }))
+      })
+      
+      monitor.checkpoint('rows_processed')
+
+      // Batch insert with optimized performance (without transaction for testing)
+      console.log(`About to insert ${rowsWithFileId.flat().length} rows`)
+      await queries.batchCreateExcelRows(rowsWithFileId.flat())
+      
+      monitor.checkpoint('rows_saved')
 
       // Save aggregated data for quick queries
       const aggregatedArray = Array.from(aggregatedData.values())
@@ -372,18 +369,48 @@ async function processUpload(request: NextRequest, monitor: PerformanceMonitor) 
   } catch (error) {
     monitor.checkpoint('error_occurred')
     
-    console.error('Error processing Excel file:', {
-      error: error instanceof Error ? error.message : String(error),
+    // Enhanced error logging with more context
+    const errorDetails = {
+      message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : 'UnknownError',
+      timestamp: new Date().toISOString(),
       performance: monitor.getReport(),
-    })
+      fileName: file?.name,
+      fileSize: file?.size,
+      fileType: file?.type,
+    }
+    
+    console.error('=== EXCEL UPLOAD ERROR ===')
+    console.error('Error processing Excel file:', errorDetails)
+    console.error('========================')
+    
+    // Log specific error types for better debugging
+    if (error instanceof Error) {
+      if (error.message.includes('ENOENT')) {
+        console.error('File not found error - possible file corruption during upload')
+      } else if (error.message.includes('Invalid file format')) {
+        console.error('Excel file format validation failed')
+      } else if (error.message.includes('Database')) {
+        console.error('Database operation failed - check connection and schema')
+      } else if (error.message.includes('Memory')) {
+        console.error('Memory limit exceeded - file too large for processing')
+      } else if (error.message.includes('Timeout')) {
+        console.error('Request timeout - processing took too long')
+      }
+    }
     
     return NextResponse.json(
       { 
         error: 'Failed to process Excel file',
         details: process.env.NODE_ENV === 'development' 
-          ? error instanceof Error ? error.message : String(error)
-          : undefined
+          ? errorDetails.message
+          : undefined,
+        timestamp: errorDetails.timestamp,
+        ...(process.env.NODE_ENV === 'development' && {
+          errorCode: errorDetails.name,
+          performance: errorDetails.performance
+        })
       },
       { status: 500 }
     )
