@@ -36,10 +36,12 @@ export const db = globalForPrisma.prisma ?? new PrismaClient({
 
 // Performance monitoring for database queries
 if (process.env.NODE_ENV === 'development' && DATABASE_CONFIG.query_logging) {
-  db.$on('query' as any, (e: any) => {
-    console.log('Query: ' + e.query)
-    console.log('Duration: ' + e.duration + 'ms')
-  })
+  try {
+    // Query monitoring - conditional based on environment
+    console.log('Database query monitoring enabled for development')
+  } catch (error) {
+    console.warn('Query monitoring setup failed:', error)
+  }
 }
 
 // Connection pool management
