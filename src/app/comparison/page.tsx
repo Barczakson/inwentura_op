@@ -59,23 +59,21 @@ export default function ComparisonPage() {
   }, [isMounted])
 
   const loadData = async () => {
-    try {
+    const result = await handleAsyncOperation(async () => {
       console.log('loadData: Fetching from API...')
       const response = await fetch('/api/excel/data?includeRaw=true')
-      if (response.ok) {
-        const data = await response.json()
-        console.log('loadData: Received data:', {
-          aggregatedCount: data.aggregated?.length || 0,
-          firstAggregated: data.aggregated?.[0]?.name || 'none'
-        })
-        setAggregatedData(data.aggregated || [])
-        console.log('✅ loadData: State updated')
-      } else {
-        console.error('Failed to load data:', response.status)
-      }
-    } catch (error) {
-      console.error('Error loading data:', error)
-    }
+      const data = await handleApiResponse<any>(response)
+      
+      console.log('loadData: Received data:', {
+        aggregatedCount: data.aggregated?.length || 0,
+        firstAggregated: data.aggregated?.[0]?.name || 'none'
+      })
+      
+      setAggregatedData(data.aggregated || [])
+      console.log('✅ loadData: State updated')
+      
+      return data
+    }, 'Nie udało się załadować danych')
   }
 
   const processPreviousMonthFile = async (file: File): Promise<any[]> => {

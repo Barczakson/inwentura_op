@@ -138,16 +138,13 @@ export default function Home() {
   }, [])
 
   const loadUploadedFiles = useCallback(async () => {
-    try {
+    const result = await handleAsyncOperation(async () => {
       const response = await fetch('/api/excel/files')
-      if (response.ok) {
-        const files = await response.json()
-        setUploadedFiles(files)
-      } else {
-        console.error('Failed to load uploaded files:', response.status)
-      }
-    } catch (error) {
-      console.error('Error loading uploaded files:', error)
+      return await handleApiResponse<any>(response)
+    }, 'Nie udało się załadować przesłanych plików')
+    
+    if (result) {
+      setUploadedFiles(result)
     }
   }, [])
 
@@ -563,7 +560,7 @@ export default function Home() {
   }
 
   const handleExportData = async (type: 'aggregated' | 'raw') => {
-    try {
+    const result = await handleAsyncOperation(async () => {
       const response = await fetch(`/api/excel/export?type=${type}`)
       if (response.ok) {
         const blob = await response.blob()
@@ -577,25 +574,14 @@ export default function Home() {
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
         
-        toast({
-          title: "Success",
-          description: `${type.charAt(0).toUpperCase() + type.slice(1)} data exported successfully.`,
-        })
+        showSuccessToast(`${type.charAt(0).toUpperCase() + type.slice(1)} dane wyeksportowane pomyślnie.`, 'Sukces')
+        return true
       } else {
-        toast({
-          title: "Error",
-          description: "Failed to export data",
-          variant: "destructive",
-        })
+        const error = await parseHttpError(response)
+        showErrorToast(error)
+        throw error
       }
-    } catch (error) {
-      console.error('Error exporting data:', error)
-      toast({
-        title: "Error",
-        description: "Failed to export data",
-        variant: "destructive",
-      })
-    }
+    }, 'Nie udało się wyeksportować danych')
   }
 
   const handleViewFileData = async (fileId: string) => {
@@ -659,28 +645,20 @@ export default function Home() {
   const handleBulkDelete = async () => {
     if (selectedItems.size === 0) return
     
-    try {
-      const promises = Array.from(selectedItems).map(id => 
-        fetch(`/api/excel/data?id=${id}`, { method: 'DELETE' })
-      )
+    const result = await handleAsyncOperation(async () => {
+      const promises = Array.from(selectedItems).map(async id => {
+        const response = await fetch(`/api/excel/data?id=${id}`, { method: 'DELETE' })
+        return handleApiResponse(response)
+      })
       
       await Promise.all(promises)
       setAggregatedData(prev => prev.filter(item => !selectedItems.has(item.id)))
       setSelectedItems(new Set())
       setBulkEditMode(false)
       
-      toast({
-        title: "Sukces",
-        description: `Usunięto ${selectedItems.size} pozycji.`,
-      })
-    } catch (error) {
-      console.error('Error during bulk delete:', error)
-      toast({
-        title: "Błąd",
-        description: "Nie udało się usunąć wybranych pozycji",
-        variant: "destructive",
-      })
-    }
+      showSuccessToast(`Usunięto ${selectedItems.size} pozycji.`, 'Sukces')
+      return true
+    }, 'Nie udało się usunąć wybranych pozycji')
   }
 
   const handleStartInlineEdit = (itemId: string, currentQuantity: number) => {
@@ -694,17 +672,19 @@ export default function Home() {
   }
 
   const handleSaveInlineEdit = async (itemId: string) => {
+    if (!inlineEditValue) return
+    
     const newQuantity = parseFloat(inlineEditValue)
-    if (isNaN(newQuantity) || newQuantity <= 0) {
+    if (isNaN(newQuantity)) {
       toast({
         title: "Błąd",
-        description: "Wprowadź prawidłową ilość",
+        description: "Podaj poprawną liczbę",
         variant: "destructive",
       })
       return
     }
 
-    try {
+    const result = await handleAsyncOperation(async () => {
       const response = await fetch('/api/excel/data', {
         method: 'PUT',
         headers: {
@@ -726,31 +706,19 @@ export default function Home() {
         )
         setInlineEditingItem(null)
         setInlineEditValue('')
-        toast({
-          title: "Sukces",
-          description: "Ilość została zaktualizowana.",
-        })
+        showSuccessToast('Ilość została zaktualizowana.', 'Sukces')
+        return true
       } else {
-        const error = await response.json()
-        toast({
-          title: "Błąd",
-          description: error.error || "Nie udało się zaktualizować ilości",
-          variant: "destructive",
-        })
+        const error = await parseHttpError(response)
+        showErrorToast(error)
+        throw error
       }
-    } catch (error) {
-      console.error('Error updating quantity:', error)
-      toast({
-        title: "Błąd",
-        description: "Nie udało się zaktualizować ilości",
-        variant: "destructive",
-      })
-    }
+    }, 'Nie udało się zaktualizować ilości')
   }
 
 
   const handleDeleteFile = async (fileId: string) => {
-    try {
+    const result = await handleAsyncOperation(async () => {
       const response = await fetch(`/api/excel/files?id=${fileId}`, {
         method: 'DELETE'
       })
@@ -760,25 +728,14 @@ export default function Home() {
         // Reload all data to get the updated aggregation from remaining files
         await loadData()
         await loadUploadedFiles()
-        toast({
-          title: "Success",
-          description: "File deleted successfully.",
-        })
+        showSuccessToast('Plik usunięty pomyślnie.', 'Sukces')
+        return true
       } else {
-        toast({
-          title: "Error",
-          description: "Failed to delete file",
-          variant: "destructive",
-        })
+        const error = await parseHttpError(response)
+        showErrorToast(error)
+        throw error
       }
-    } catch (error) {
-      console.error('Error deleting file:', error)
-      toast({
-        title: "Error",
-        description: "Failed to delete file",
-        variant: "destructive",
-      })
-    }
+    }, 'Nie udało się usunąć pliku')
   }
 
 

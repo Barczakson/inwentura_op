@@ -4,8 +4,22 @@ import { ensureMigrationsRun } from '@/lib/migrate'
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('Files API called at:', new Date().toISOString());
+    
     // Ensure database is ready (runtime migration check)
     await ensureMigrationsRun()
+    
+    // Test database connection
+    try {
+      await db.$queryRaw`SELECT 1`;
+      console.log('Database connection: OK');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return NextResponse.json(
+        { error: 'Database connection failed', details: dbError instanceof Error ? dbError.message : 'Unknown error' },
+        { status: 500 }
+      );
+    }
     
     const files = await queries.getExcelFiles({
       orderBy: { uploadDate: 'desc' },
@@ -22,9 +36,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(formattedFiles)
   } catch (error) {
-    console.error('Error fetching files:', error)
+    console.error('Error fetching files:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      timestamp: new Date().toISOString()
+    })
     return NextResponse.json(
-      { error: 'Failed to fetch files' },
+      { error: 'Failed to fetch files', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }

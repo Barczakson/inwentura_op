@@ -4,6 +4,8 @@ import { ensureMigrationsRun } from '@/lib/migrate'
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('Data API called at:', new Date().toISOString());
+    
     // Ensure database is ready (runtime migration check)
     await ensureMigrationsRun()
     
@@ -11,10 +13,44 @@ export async function GET(request: NextRequest) {
     const includeRaw = searchParams.get('includeRaw') === 'true'
     const fileId = searchParams.get('fileId')
     const search = searchParams.get('search') || ''
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    let page = parseInt(searchParams.get('page') || '1')
+    let limit = parseInt(searchParams.get('limit') || '50')
     const sortBy = searchParams.get('sortBy') || 'name'
     const sortDirection = searchParams.get('sortDirection') || 'asc'
+
+    // Validate parameters
+    if (isNaN(page) || page < 1) {
+      console.warn('Invalid page parameter, defaulting to 1:', searchParams.get('page'));
+      page = 1;
+    }
+
+    if (isNaN(limit) || limit < 1 || limit > 1000) {
+      console.warn('Invalid limit parameter, defaulting to 50:', searchParams.get('limit'));
+      limit = 50;
+    }
+
+    console.log('Data API called with params:', {
+      includeRaw,
+      fileId,
+      search,
+      page,
+      limit,
+      sortBy,
+      sortDirection,
+      timestamp: new Date().toISOString()
+    });
+
+    // Test database connection
+    try {
+      await db.$queryRaw`SELECT 1`;
+      console.log('Database connection: OK');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return NextResponse.json(
+        { error: 'Database connection failed', details: dbError instanceof Error ? dbError.message : 'Unknown error' },
+        { status: 500 }
+      );
+    }
 
     // Build where clause for search and fileId
     const where: any = {}
@@ -72,6 +108,8 @@ export async function GET(request: NextRequest) {
     const totalPages = Math.ceil(total / limit)
     const offset = (page - 1) * limit
 
+    console.log('Query parameters:', { where, orderBy, offset, limit });
+
     // Get paginated data
     const aggregatedData = await queries.getAggregatedItems({
       where,
@@ -127,7 +165,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(response)
 
   } catch (error) {
-    console.error('Error fetching data:', error)
+    console.error('Error fetching data:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      params: {
+        url: request.url,
+        includeRaw,
+        fileId,
+        search,
+        page,
+        limit,
+        sortBy,
+        sortDirection
+      },
+      timestamp: new Date().toISOString()
+    })
     return NextResponse.json(
       { error: 'Failed to fetch data', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
