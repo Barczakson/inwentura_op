@@ -1,7 +1,8 @@
-import '@testing-library/jest-dom'
+// Use require instead of import for CommonJS compatibility
+require('@testing-library/jest-dom')
 
 // Load polyfills first
-import './jest.setup.polyfills'
+require('./jest.setup.polyfills')
 
 // Mock Next.js router
 jest.mock('next/router', () => ({

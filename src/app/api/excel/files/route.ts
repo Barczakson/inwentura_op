@@ -1,27 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, queries } from '@/lib/db-config'
+import { ensureMigrationsRun } from '@/lib/migrate'
 
 export async function GET(request: NextRequest) {
   try {
-    const files = await db.excelFile.findMany({
-      orderBy: {
-        uploadDate: 'desc'
-      }
+    console.log('Files API called at:', new Date().toISOString());
+    
+    // Ensure database is ready (runtime migration check)
+    await ensureMigrationsRun()
+    
+    // Test database connection
+    try {
+      await db.$queryRaw`SELECT 1`;
+      console.log('Database connection: OK');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return NextResponse.json(
+        { error: 'Database connection failed', details: dbError instanceof Error ? dbError.message : 'Unknown error' },
+        { status: 500 }
+      );
+    }
+    
+    const files = await queries.getExcelFiles({
+      orderBy: { uploadDate: 'desc' },
+      includeStats: true
     })
 
     const formattedFiles = files.map(file => ({
       id: file.id,
       name: file.fileName,
       size: file.fileSize,
-      uploadDate: file.uploadDate.toISOString(),
+      uploadDate: file.uploadDate,
       rowCount: file.rowCount
     }))
 
     return NextResponse.json(formattedFiles)
   } catch (error) {
-    console.error('Error fetching files:', error)
+    console.error('Error fetching files:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      timestamp: new Date().toISOString()
+    })
     return NextResponse.json(
-      { error: 'Failed to fetch files' },
+      { error: 'Failed to fetch files', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
@@ -29,6 +50,9 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    // Ensure database is ready (runtime migration check)
+    await ensureMigrationsRun()
+    
     const { searchParams } = new URL(request.url)
     const fileId = searchParams.get('id')
 
@@ -60,7 +84,9 @@ export async function DELETE(request: NextRequest) {
     for (const item of allAggregatedItems) {
       if (item.sourceFiles) {
         try {
-          const sourceFileIds = JSON.parse(item.sourceFiles) as string[]
+          const sourceFileIds = Array.isArray(item.sourceFiles) 
+            ? item.sourceFiles as string[] 
+            : []
           
           // Check if this item contains the file we're deleting
           if (sourceFileIds.includes(fileId)) {
@@ -76,7 +102,7 @@ export async function DELETE(request: NextRequest) {
               await db.aggregatedItem.update({
                 where: { id: item.id },
                 data: {
-                  sourceFiles: JSON.stringify(updatedSourceFileIds),
+                  sourceFiles: updatedSourceFileIds,
                   quantity: Math.max(0, item.quantity - quantityToSubtract), // Ensure non-negative
                   count: Math.max(0, (item.count || 0) - rowsToDelete.filter(
                     row => (row.itemId || null) === (item.itemId || null) && 

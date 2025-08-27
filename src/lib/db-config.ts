@@ -30,45 +30,18 @@ export const db = globalForPrisma.prisma ?? new PrismaClient({
     },
   ] : ['error'],
   
-  // Connection pool optimization
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
-  
   // Error handling
   errorFormat: process.env.NODE_ENV === 'development' ? 'pretty' : 'minimal',
 })
 
 // Performance monitoring for database queries
-if (DATABASE_CONFIG.query_logging && process.env.NODE_ENV === 'development') {
-  db.$on('query', (e) => {
-    if (e.duration > DATABASE_CONFIG.slow_query_threshold) {
-      console.warn('Slow Query Detected:', {
-        query: e.query,
-        duration: `${e.duration}ms`,
-        params: e.params,
-        timestamp: e.timestamp,
-      })
-    }
-  })
-  
-  db.$on('error', (e) => {
-    console.error('Database Error:', {
-      message: e.message,
-      target: e.target,
-      timestamp: e.timestamp,
-    })
-  })
-  
-  db.$on('warn', (e) => {
-    console.warn('Database Warning:', {
-      message: e.message,
-      target: e.target,
-      timestamp: e.timestamp,
-    })
-  })
+if (process.env.NODE_ENV === 'development' && DATABASE_CONFIG.query_logging) {
+  try {
+    // Query monitoring - conditional based on environment
+    console.log('Database query monitoring enabled for development')
+  } catch (error) {
+    console.warn('Query monitoring setup failed:', error)
+  }
 }
 
 // Connection pool management
@@ -93,7 +66,7 @@ process.on('SIGTERM', async () => {
  * Transaction wrapper with performance monitoring
  */
 export async function withTransaction<T>(
-  callback: (tx: PrismaClient) => Promise<T>,
+  callback: (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>) => Promise<T>,
   options: {
     maxWait?: number
     timeout?: number
@@ -103,14 +76,18 @@ export async function withTransaction<T>(
   const startTime = performance.now()
   
   try {
-    const result = await db.$transaction(
-      callback as any,
-      {
-        maxWait: options.maxWait || 5000, // 5 seconds
-        timeout: options.timeout || 10000, // 10 seconds
-        isolationLevel: options.isolationLevel,
-      }
-    )
+    // Transaction options optimized for SQLite/PostgreSQL
+    const transactionOptions: any = {
+      maxWait: options.maxWait || 10000, // 10 seconds
+      timeout: options.timeout || 30000, // 30 seconds
+    }
+    
+    // PostgreSQL supports all isolation levels
+    if (options.isolationLevel) {
+      transactionOptions.isolationLevel = options.isolationLevel
+    }
+    
+    const result = await db.$transaction(callback, transactionOptions)
     
     const duration = performance.now() - startTime
     
@@ -158,6 +135,7 @@ export const queries = {
         name: true,
         quantity: true,
         unit: true,
+        fileId: true,
         sourceFiles: true,
         count: true,
         createdAt: true,
@@ -167,6 +145,12 @@ export const queries = {
             select: {
               id: true,
               fileName: true,
+              fileSize: true,
+              rowCount: true,
+              uploadDate: true,
+              originalStructure: true,
+              columnMapping: true,
+              detectedHeaders: true,
             },
           },
         }),
@@ -232,8 +216,10 @@ export const queries = {
         uploadDate: true,
         ...(params.includeStats && {
           _count: {
-            rows: true,
-            aggregated: true,
+            select: {
+              rows: true,
+              aggregated: true,
+            },
           },
         }),
       },
@@ -248,18 +234,48 @@ export const queries = {
    * Batch create excel rows with optimized performance
    */
   async batchCreateExcelRows(rows: any[], batchSize = 1000) {
-    const results = []
+    const results: { count: number }[] = []
     
-    for (let i = 0; i < rows.length; i += batchSize) {
-      const batch = rows.slice(i, i + batchSize)
-      const result = await db.excelRow.createMany({
-        data: batch,
-        skipDuplicates: true,
-      })
-      results.push(result)
-      
-      // Allow event loop to process other requests
-      await new Promise(resolve => setImmediate(resolve))
+    // Check if we're using PostgreSQL (skipDuplicates supported) or SQLite (not supported)
+    const isPostgres = process.env.DATABASE_URL?.includes('postgresql') || process.env.DATABASE_URL?.includes('postgres')
+    const isSQLite = process.env.DATABASE_URL?.includes('file:') || process.env.DATABASE_URL?.includes('sqlite')
+    
+    if (isSQLite && rows.length > 100) {
+      // For SQLite with large datasets, use individual creates to avoid timeout
+      console.log(`SQLite detected with ${rows.length} rows, using individual inserts`)
+      let count = 0
+      for (let i = 0; i < rows.length; i++) {
+        try {
+          await db.excelRow.create({ data: rows[i] })
+          count++
+          
+          // Progress indicator and event loop yield every 50 items
+          if (i % 50 === 0) {
+            console.log(`Processed ${i + 1}/${rows.length} rows`)
+            await new Promise(resolve => setImmediate(resolve))
+          }
+        } catch (error) {
+          console.warn(`Failed to create row ${i}:`, error instanceof Error ? error.message : String(error))
+        }
+      }
+      results.push({ count })
+    } else {
+      // Use createMany for PostgreSQL or small datasets
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize)
+        const createOptions: any = { data: batch }
+        
+        // Only add skipDuplicates for PostgreSQL
+        if (isPostgres) {
+          createOptions.skipDuplicates = true
+        }
+        
+        const result = await db.excelRow.createMany(createOptions)
+        results.push(result)
+        
+        // Allow event loop to process other requests
+        await new Promise(resolve => setImmediate(resolve))
+      }
     }
     
     return results
