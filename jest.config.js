@@ -44,11 +44,21 @@ const customJestConfig = {
         '<rootDir>/src/lib/**/*.{test,spec}.{js,jsx,ts,tsx}',
         '<rootDir>/src/lib/__tests__/**/*.{js,jsx,ts,tsx}',
       ],
+      testPathIgnorePatterns: [
+        '<rootDir>/src/app/api/',
+      ],
       setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
       moduleNameMapper: {
         '^@/(.*)$': '<rootDir>/src/$1',
       },
-      preset: 'ts-jest',
+      transform: {
+        '^.+\\.(ts|tsx)$': ['ts-jest', {
+          tsconfig: {
+            jsx: 'react-jsx',
+          },
+        }],
+      },
+      moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
     },
     {
       displayName: 'server',
@@ -62,7 +72,19 @@ const customJestConfig = {
       moduleNameMapper: {
         '^@/(.*)$': '<rootDir>/src/$1',
       },
-      preset: 'ts-jest',
+      transform: {
+        '^.+\\.(ts|tsx)$': ['ts-jest', {
+          tsconfig: {
+            jsx: 'react-jsx',
+          },
+        }],
+      },
+      moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+      globals: {
+        Request: global.Request || class Request {},
+        Response: global.Response || class Response {},
+        Headers: global.Headers || class Headers {},
+      },
     }
   ],
 }
