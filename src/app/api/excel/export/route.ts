@@ -67,7 +67,22 @@ async function processExportRequest(request: NextRequest) {
       const allStructureElements: any[] = []
 
       for (const file of files) {
-        const structure = file.originalStructure as any[]
+        // Handle both String (SQLite) and Json (PostgreSQL) types for originalStructure
+        let structure: any[] = [];
+        if (file.originalStructure) {
+          if (typeof file.originalStructure === 'string') {
+            // SQLite stores as String, so we need to parse it
+            try {
+              structure = JSON.parse(file.originalStructure) as any[];
+            } catch (error) {
+              console.warn('Failed to parse originalStructure as JSON:', error);
+              structure = [];
+            }
+          } else {
+            // PostgreSQL stores as Json, so it's already parsed
+            structure = file.originalStructure as any[];
+          }
+        }
         
         // Collect all rows for global aggregation
         file.rows.forEach(row => {

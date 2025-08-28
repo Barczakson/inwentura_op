@@ -11,7 +11,13 @@ async function main() {
     data: {
       fileName: 'sample_data.xlsx',
       fileSize: 1024,
-      rowCount: 5
+      rowCount: 5,
+      originalStructure: {
+        sheets: ['Sheet1'],
+        categories: ['SUROWCE'],
+        headers: ['ID', 'Name', 'Quantity', 'Unit']
+      },
+      detectedHeaders: ['ID', 'Name', 'Quantity', 'Unit']
     }
   })
 
@@ -44,7 +50,7 @@ async function main() {
       name: 'Apple', 
       quantity: 10, 
       unit: 'kg',
-      sourceFiles: JSON.stringify([excelFile.id]),
+      sourceFiles: [excelFile.id], // JSON field for PostgreSQL
       count: 1,
       fileId: excelFile.id
     },
@@ -54,7 +60,7 @@ async function main() {
       name: 'Banana', 
       quantity: 15, 
       unit: 'kg',
-      sourceFiles: JSON.stringify([excelFile.id]),
+      sourceFiles: [excelFile.id], // JSON field for PostgreSQL
       count: 1,
       fileId: excelFile.id
     },
@@ -64,7 +70,7 @@ async function main() {
       name: 'Orange', 
       quantity: 8, 
       unit: 'kg',
-      sourceFiles: JSON.stringify([excelFile.id]),
+      sourceFiles: [excelFile.id], // JSON field for PostgreSQL
       count: 1,
       fileId: excelFile.id
     },
@@ -74,7 +80,7 @@ async function main() {
       name: 'Grapes', 
       quantity: 5, 
       unit: 'kg',
-      sourceFiles: JSON.stringify([excelFile.id]),
+      sourceFiles: [excelFile.id], // JSON field for PostgreSQL
       count: 1,
       fileId: excelFile.id
     },
@@ -84,7 +90,7 @@ async function main() {
       name: 'Mango', 
       quantity: 12, 
       unit: 'kg',
-      sourceFiles: JSON.stringify([excelFile.id]),
+      sourceFiles: [excelFile.id], // JSON field for PostgreSQL
       count: 1,
       fileId: excelFile.id
     }

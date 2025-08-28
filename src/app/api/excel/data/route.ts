@@ -1,325 +1,203 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, queries } from '@/lib/db-config'
-import {
-  withTimeout,
-  withErrorHandling,
-  createCompressedResponse,
-  validateAndSanitizeRequest,
-  PerformanceMonitor,
-  REQUEST_TIMEOUTS,
-  OPTIMIZED_QUERIES,
-} from '@/lib/server-optimizations'
+import { ensureMigrationsRun } from '@/lib/migrate'
 
-export const GET = withErrorHandling(async (request: NextRequest) => {
-  return withTimeout(
-    processGetRequest(request),
-    REQUEST_TIMEOUTS.DEFAULT,
-    'Data fetch timeout'
-  )
-}, 'Excel Data GET')
-
-async function processGetRequest(request: NextRequest) {
-  const monitor = new PerformanceMonitor()
-  monitor.checkpoint('request_start')
-  
-  // Validate and sanitize request
-  const validation = validateAndSanitizeRequest(request)
-  if (!validation.isValid) {
-    return NextResponse.json(
-      { error: 'Invalid request', details: validation.errors },
-      { status: 400 }
-    )
-  }
-  
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = validation.sanitized.searchParams
+    console.log('Data API called at:', new Date().toISOString());
+    
+    // Ensure database is ready (runtime migration check)
+    await ensureMigrationsRun()
+    
+    const { searchParams } = new URL(request.url)
     const includeRaw = searchParams.get('includeRaw') === 'true'
-    const rawOnly = searchParams.get('rawOnly') === 'true'
     const fileId = searchParams.get('fileId')
-    
-    // console.log('Parsed parameters:', { includeRaw, rawOnly, fileId })
-    
-    // Pagination parameters
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = (page - 1) * limit
-    
-    // Search parameters
     const search = searchParams.get('search') || ''
+    let page = parseInt(searchParams.get('page') || '1')
+    let limit = parseInt(searchParams.get('limit') || '50')
     const sortBy = searchParams.get('sortBy') || 'name'
     const sortDirection = searchParams.get('sortDirection') || 'asc'
 
-    // console.log('Pagination and search parameters:', { page, limit, offset, search, sortBy, sortDirection })
+    // Validate parameters
+    if (isNaN(page) || page < 1) {
+      console.warn('Invalid page parameter, defaulting to 1:', searchParams.get('page'));
+      page = 1;
+    }
 
-    monitor.checkpoint('parameters_parsed')
+    if (isNaN(limit) || limit < 1 || limit > 1000) {
+      console.warn('Invalid limit parameter, defaulting to 50:', searchParams.get('limit'));
+      limit = 50;
+    }
+
+    console.log('Data API called with params:', {
+      includeRaw,
+      fileId,
+      search,
+      page,
+      limit,
+      sortBy,
+      sortDirection,
+      timestamp: new Date().toISOString()
+    });
+
+    // Test database connection
+    try {
+      await db.$queryRaw`SELECT 1`;
+      console.log('Database connection: OK');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return NextResponse.json(
+        { error: 'Database connection failed', details: dbError instanceof Error ? dbError.message : 'Unknown error' },
+        { status: 500 }
+      );
+    }
+
+    // Build where clause for search and fileId
+    const where: any = {}
+    const conditions: any[] = []
+    const isSQLite = process.env.DATABASE_URL?.includes('file:') || process.env.DATABASE_URL?.includes('sqlite')
     
-    // Get aggregated data with optimized queries
-    let aggregatedData: any[] = []
-    let paginationMeta: any = null
-    
-    if (rawOnly) {
-      // Skip aggregated data when rawOnly is true
-      aggregatedData = []
-    } else if (fileId) {
-      // Optimized query for file-specific aggregated items
-      const allAggregatedData = await queries.getAggregatedItems({
-        where: {},
-        orderBy: [
-          { name: 'asc' },
-          { unit: 'asc' }
-        ],
-        includeFile: true
-      })
+    if (search) {
+      // SQLite doesn't support case insensitive mode, PostgreSQL does
+      const searchOptions = isSQLite 
+        ? { contains: search } 
+        : { contains: search, mode: 'insensitive' as const }
       
-      monitor.checkpoint('file_aggregated_data_fetched')
-      
-      // Filter aggregated items that contain the specific fileId in their sourceFiles
-      aggregatedData = allAggregatedData.filter(item => {
-        if (item.sourceFiles) {
-          try {
-            const sourceFileIds = JSON.parse(item.sourceFiles) as string[];
-            return sourceFileIds.includes(fileId);
-          } catch (error) {
-            console.warn('Failed to parse sourceFiles JSON:', error);
-            return false;
-          }
-        }
-        return item.fileId === fileId; // Fallback to direct fileId match
-      });
-    } else {
-      // Build where clause for search
-      const whereClause: any = {}
-      if (search) {
-        whereClause.OR = [
-          { name: { contains: search, mode: 'insensitive' } },
-          { itemId: { contains: search, mode: 'insensitive' } }
+      conditions.push({
+        OR: [
+          { name: searchOptions },
+          { itemId: searchOptions }
         ]
+      })
+    }
+    
+    if (fileId) {
+      // Handle fileId search - different approach for SQLite vs PostgreSQL
+      if (isSQLite) {
+        // For SQLite, just match fileId directly (simpler approach)
+        conditions.push({ fileId: fileId })
+      } else {
+        // For PostgreSQL, use JSON path search for sourceFiles array
+        conditions.push({
+          OR: [
+            { fileId: fileId },
+            { sourceFiles: { path: ['$[*]'], equals: fileId } }
+          ]
+        })
       }
+    }
+    
+    // Combine all conditions with AND
+    if (conditions.length === 1) {
+      Object.assign(where, conditions[0])
+    } else if (conditions.length > 1) {
+      where.AND = conditions
+    }
 
-      // Get total count for pagination
-      const totalCount = await db.aggregatedItem.count({
-        where: whereClause
-      })
+    // Build order by clause with validation
+    const validSortFields = ['name', 'itemId', 'quantity', 'unit', 'createdAt', 'updatedAt']
+    const validSortDirections = ['asc', 'desc']
+    
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'name'
+    const sortDir = validSortDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc'
+    
+    const orderBy: any = { [sortField]: sortDir }
 
-      // Optimized aggregated data query with pagination
-      aggregatedData = await queries.getAggregatedItems({
-        where: whereClause,
-        orderBy: {
-          [sortBy]: sortDirection as 'asc' | 'desc'
-        },
-        skip: offset,
-        take: limit,
-        includeFile: true
-      })
-      
-      monitor.checkpoint('aggregated_data_fetched')
+    // Get total count
+    const total = await db.aggregatedItem.count({ where })
+    const totalPages = Math.ceil(total / limit)
+    const offset = (page - 1) * limit
 
-      // Add pagination metadata to response
-      paginationMeta = {
+    console.log('Query parameters:', { where, orderBy, offset, limit });
+
+    // Get paginated data
+    const aggregatedData = await queries.getAggregatedItems({
+      where,
+      orderBy,
+      skip: offset,
+      take: limit
+    })
+
+    const response: any = {
+      aggregated: aggregatedData,
+      pagination: {
         page,
         limit,
-        total: totalCount,
-        totalPages: Math.ceil(totalCount / limit),
-        hasNext: page < Math.ceil(totalCount / limit),
+        total,
+        totalPages,
+        hasNext: page < totalPages,
         hasPrev: page > 1
       }
     }
 
-    // Optimized source files processing with batch queries
-    const aggregatedWithSourceFiles = await processSourceFiles(aggregatedData, monitor)
-
-    let rawData: any[] = []
+    // Include raw data if requested
     if (includeRaw) {
-      monitor.checkpoint('raw_data_processing_start')
+      const rawWhere: any = fileId ? { fileId } : {}
       
-      // Build optimized where clause for raw data
-      const rawWhereClause: any = fileId ? { fileId: fileId } : {}
-      
-      // Add search functionality for raw data
-      if (search && fileId) {
-        rawWhereClause.AND = [
-          { fileId: fileId },
-          {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } },
-              { itemId: { contains: search, mode: 'insensitive' } }
-            ]
-          }
+      if (search) {
+        // SQLite doesn't support case insensitive mode, PostgreSQL does
+        const isSQLite = process.env.DATABASE_URL?.includes('file:') || process.env.DATABASE_URL?.includes('sqlite')
+        const searchOptions = isSQLite 
+          ? { contains: search } 
+          : { contains: search, mode: 'insensitive' as const }
+          
+        rawWhere.OR = [
+          { name: searchOptions },
+          { itemId: searchOptions }
         ]
       }
       
-      // Add search functionality for raw data when not filtered by file
-      if (search && !fileId) {
-        rawWhereClause.OR = [
-          { name: { contains: search, mode: 'insensitive' } },
-          { itemId: { contains: search, mode: 'insensitive' } }
-        ]
-      }
+      // Build raw data order by clause (limited to relevant fields for raw data)
+      const rawValidSortFields = ['name', 'itemId', 'quantity', 'unit', 'originalRowIndex']
+      const rawSortField = rawValidSortFields.includes(sortBy) ? sortBy : 'originalRowIndex'
+      const rawOrderBy: any = { [rawSortField]: sortDir }
+
+      const rawData = await queries.getExcelRows({
+        where: rawWhere,
+        orderBy: rawOrderBy,
+        skip: offset,
+        take: limit
+      })
       
-      // If we're viewing a specific file or rawOnly mode, add pagination for raw data
-      if (fileId || rawOnly) {
-        // Get total count for file raw data
-        const rawTotalCount = await db.excelRow.count({
-          where: rawWhereClause
-        })
-        
-        // Optimized raw data query
-        rawData = await queries.getExcelRows({
-          where: rawWhereClause,
-          orderBy: {
-            [sortBy === 'quantity' ? 'quantity' : sortBy === 'unit' ? 'unit' : 'name']: sortDirection as 'asc' | 'desc'
-          },
-          skip: offset,
-          take: limit,
-          includeFile: true
-        })
-        
-        // Update pagination metadata for raw data when viewing a file or in rawOnly mode
-        paginationMeta = {
-          page,
-          limit,
-          total: rawTotalCount,
-          totalPages: Math.ceil(rawTotalCount / limit),
-          hasNext: page * limit < rawTotalCount,
-          hasPrev: page > 1
-        }
-      } else {
-        // Optimized raw data query without pagination
-        rawData = await queries.getExcelRows({
-          where: rawWhereClause,
-          orderBy: {
-            createdAt: 'desc'
-          },
-          includeFile: true
-        })
-      }
-    }
-
-    monitor.checkpoint('data_processing_complete')
-    
-    const response: any = {
-      aggregated: aggregatedWithSourceFiles
-    }
-
-    // Add raw data only when requested
-    if (includeRaw) {
       response.raw = rawData
-      monitor.checkpoint('raw_data_added')
-    }
-
-    // Add pagination metadata if available
-    if (paginationMeta) {
-      response.pagination = paginationMeta
-    }
-    
-    // Add performance data in development
-    if (process.env.NODE_ENV === 'development') {
-      response.performance = monitor.getReport()
-    }
-
-    // Return compressed response for large datasets
-    if (JSON.stringify(response).length > 10000) {
-      return createCompressedResponse(response)
     }
 
     return NextResponse.json(response)
 
   } catch (error) {
-    monitor.checkpoint('error_occurred')
+    // Parse URL parameters for error logging
+    const { searchParams } = new URL(request.url)
+    const includeRaw = searchParams.get('includeRaw') === 'true'
+    const fileId = searchParams.get('fileId')
+    const search = searchParams.get('search') || ''
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const sortBy = searchParams.get('sortBy') || 'name'
+    const sortDirection = searchParams.get('sortDirection') || 'asc'
     
     console.error('Error fetching data:', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      performance: monitor.getReport(),
-    })
-    
-    return NextResponse.json(
-      { 
-        error: 'Failed to fetch data', 
-        details: process.env.NODE_ENV === 'development' 
-          ? error instanceof Error ? error.message : String(error)
-          : undefined
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      params: {
+        url: request.url,
+        includeRaw,
+        fileId,
+        search,
+        page,
+        limit,
+        sortBy,
+        sortDirection
       },
+      timestamp: new Date().toISOString()
+    })
+    return NextResponse.json(
+      { error: 'Failed to fetch data', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
 }
 
-/**
- * Optimized source files processing with batch queries
- */
-async function processSourceFiles(aggregatedData: any[], monitor: PerformanceMonitor) {
-  if (aggregatedData.length === 0) return []
-  
-  // Batch query for all source rows to minimize database calls
-  const uniqueItems = aggregatedData.map(item => ({
-    itemId: item.itemId,
-    name: item.name,
-    unit: item.unit
-  }))
-  
-  // Build OR conditions for batch query
-  const sourceRowsQuery = {
-    OR: uniqueItems.map(item => ({
-      itemId: item.itemId || null,
-      name: item.name,
-      unit: item.unit
-    }))
-  }
-  
-  const sourceRows = await queries.getExcelRows({
-    where: sourceRowsQuery,
-    includeFile: false
-  })
-  
-  monitor.checkpoint('source_files_batch_fetched')
-  
-  // Group source rows by item key
-  const sourceRowsMap = new Map()
-  sourceRows.forEach(row => {
-    const key = `${row.itemId || ''}|${row.name}|${row.unit}`
-    if (!sourceRowsMap.has(key)) {
-      sourceRowsMap.set(key, [])
-    }
-    sourceRowsMap.get(key).push(row)
-  })
-  
-  // Process aggregated data with source files
-  return aggregatedData.map(item => {
-    const key = `${item.itemId || ''}|${item.name}|${item.unit}`
-    const itemSourceRows = sourceRowsMap.get(key) || []
-    const sourceFileIds = [...new Set(itemSourceRows.map(row => row.fileId))]
-    
-    let sourceFiles: string[] = sourceFileIds
-    if (item.sourceFiles) {
-      try {
-        sourceFiles = JSON.parse(item.sourceFiles) as string[]
-      } catch (error) {
-        console.warn('Failed to parse sourceFiles JSON:', error)
-        sourceFiles = sourceFileIds
-      }
-    }
-    
-    return {
-      ...item,
-      sourceFiles,
-      count: item.count || itemSourceRows.length
-    }
-  })
-}
-
-export const PUT = withErrorHandling(async (request: NextRequest) => {
-  return withTimeout(
-    processPutRequest(request),
-    REQUEST_TIMEOUTS.DEFAULT,
-    'Data update timeout'
-  )
-}, 'Excel Data PUT')
-
-async function processPutRequest(request: NextRequest) {
-  const monitor = new PerformanceMonitor()
-  monitor.checkpoint('request_start')
-  
+export async function PUT(request: NextRequest) {
   try {
     const { id, quantity } = await request.json()
 
@@ -330,59 +208,26 @@ async function processPutRequest(request: NextRequest) {
       )
     }
 
-    monitor.checkpoint('validation_complete')
-    
     const updatedItem = await db.aggregatedItem.update({
       where: { id },
       data: { 
         quantity,
         updatedAt: new Date()
-      },
-      select: OPTIMIZED_QUERIES.AGGREGATED_ITEM_SELECT
+      }
     })
-    
-    monitor.checkpoint('item_updated')
 
-    return NextResponse.json({
-      ...updatedItem,
-      ...(process.env.NODE_ENV === 'development' && {
-        performance: monitor.getReport()
-      })
-    })
+    return NextResponse.json(updatedItem)
 
   } catch (error) {
-    monitor.checkpoint('error_occurred')
-    
-    console.error('Error updating item:', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      performance: monitor.getReport(),
-    })
-    
+    console.error('Error updating item:', error)
     return NextResponse.json(
-      { 
-        error: 'Failed to update item',
-        details: process.env.NODE_ENV === 'development' 
-          ? error instanceof Error ? error.message : String(error)
-          : undefined
-      },
+      { error: 'Failed to update item' },
       { status: 500 }
     )
   }
 }
 
-export const DELETE = withErrorHandling(async (request: NextRequest) => {
-  return withTimeout(
-    processDeleteRequest(request),
-    REQUEST_TIMEOUTS.DEFAULT,
-    'Data deletion timeout'
-  )
-}, 'Excel Data DELETE')
-
-async function processDeleteRequest(request: NextRequest) {
-  const monitor = new PerformanceMonitor()
-  monitor.checkpoint('request_start')
-  
+export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -394,37 +239,16 @@ async function processDeleteRequest(request: NextRequest) {
       )
     }
 
-    monitor.checkpoint('validation_complete')
-    
     await db.aggregatedItem.delete({
       where: { id }
     })
-    
-    monitor.checkpoint('item_deleted')
 
-    return NextResponse.json({ 
-      success: true,
-      ...(process.env.NODE_ENV === 'development' && {
-        performance: monitor.getReport()
-      })
-    })
+    return NextResponse.json({ success: true })
 
   } catch (error) {
-    monitor.checkpoint('error_occurred')
-    
-    console.error('Error deleting item:', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      performance: monitor.getReport(),
-    })
-    
+    console.error('Error deleting item:', error)
     return NextResponse.json(
-      { 
-        error: 'Failed to delete item',
-        details: process.env.NODE_ENV === 'development' 
-          ? error instanceof Error ? error.message : String(error)
-          : undefined
-      },
+      { error: 'Failed to delete item' },
       { status: 500 }
     )
   }

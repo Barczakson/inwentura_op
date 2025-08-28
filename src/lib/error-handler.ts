@@ -169,22 +169,37 @@ export function parseJavaScriptError(error: unknown): AppError {
  * Show error toast notification
  */
 export function showErrorToast(error: AppError): void {
-  const config = ERROR_MESSAGES[error.type]
-  
-  toast({
-    title: config.title,
-    description: error.message,
-    variant: 'destructive',
-  })
-
-  // Log detailed error information for debugging
-  console.error(`[${error.type.toUpperCase()}]`, {
-    message: error.message,
+  // Validate error object and provide defaults
+  const safeError = {
+    type: error.type || ErrorType.UNKNOWN,
+    message: error.message || 'An unknown error occurred',
     details: error.details,
     code: error.code,
     field: error.field,
     originalError: error.originalError
-  })
+  };
+
+  // Ensure type is valid
+  if (!Object.values(ErrorType).includes(safeError.type)) {
+    safeError.type = ErrorType.UNKNOWN;
+  }
+
+  const config = ERROR_MESSAGES[safeError.type] || ERROR_MESSAGES[ErrorType.UNKNOWN];
+  
+  toast({
+    title: config.title,
+    description: safeError.message,
+    variant: 'destructive',
+  });
+
+  // Log detailed error information for debugging
+  console.error(`[${safeError.type.toUpperCase()}]`, {
+    message: safeError.message,
+    details: safeError.details,
+    code: safeError.code,
+    field: safeError.field,
+    originalError: safeError.originalError
+  });
 }
 
 /**
@@ -226,7 +241,14 @@ export async function handleAsyncOperation<T>(
     if (error instanceof Response) {
       appError = await parseHttpError(error)
     } else if (error && typeof error === 'object' && 'type' in error) {
-      appError = error as AppError
+      // Validate that the error object conforms to AppError interface
+      const potentialError = error as Partial<AppError>
+      // Ensure type is valid
+      if (potentialError.type && Object.values(ErrorType).includes(potentialError.type)) {
+        appError = error as AppError
+      } else {
+        appError = parseJavaScriptError(error)
+      }
     } else {
       appError = parseJavaScriptError(error)
       if (customErrorMessage) {

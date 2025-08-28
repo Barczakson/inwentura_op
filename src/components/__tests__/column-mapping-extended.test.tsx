@@ -1,37 +1,51 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ColumnMapping } from '@/components/column-mapping'
-import * as XLSX from 'xlsx'
 
-// Mock XLSX with dynamic import support
-jest.mock('xlsx', () => ({
+// Mock XLSX module
+const mockXLSX = {
   read: jest.fn(),
   utils: {
     sheet_to_json: jest.fn(),
   },
-}))
+}
 
-// Mock dynamic import of xlsx
-jest.doMock('xlsx', () => Promise.resolve({
-  read: jest.fn(),
-  utils: {
-    sheet_to_json: jest.fn(),
-  },
-}))
+// Mock dynamic import of XLSX
+jest.mock('xlsx', () => mockXLSX)
 
-const mockXLSX = XLSX as jest.Mocked<typeof XLSX>
+// Mock File.arrayBuffer
+const mockArrayBuffer = jest.fn()
 
-const mockFile = new File(['test content'], 'test.xlsx', {
-  type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-})
+// Create a mock file with arrayBuffer method
+const createMockFile = () => {
+  const file = new File(['test content'], 'test.xlsx', {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+
+  // Mock the arrayBuffer method
+  Object.defineProperty(file, 'arrayBuffer', {
+    value: mockArrayBuffer,
+    writable: true,
+  })
+
+  return file
+}
 
 const mockOnMappingComplete = jest.fn()
 const mockOnCancel = jest.fn()
 
 describe('ColumnMapping Component', () => {
+  let mockFile: File
+
   beforeEach(() => {
     jest.clearAllMocks()
-    
+
+    // Create a fresh mock file for each test
+    mockFile = createMockFile()
+
+    // Mock arrayBuffer to return a buffer
+    mockArrayBuffer.mockResolvedValue(new ArrayBuffer(8))
+
     // Mock XLSX functions for all tests
     mockXLSX.read.mockReturnValue({
       SheetNames: ['Sheet1'],
@@ -39,7 +53,7 @@ describe('ColumnMapping Component', () => {
         Sheet1: {},
       },
     } as any)
-    
+
     mockXLSX.utils.sheet_to_json.mockReturnValue([
       ['L.p.', 'Nr indeksu', 'Nazwa towaru', 'Ilość', 'JMZ'],
       [1, 'A001', 'Product A', 10, 'kg'],

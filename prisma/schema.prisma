@@ -6,12 +6,12 @@
 
 generator client {
   provider = "prisma-client-js"
-  previewFeatures = ["driverAdapters"] // For Neon/Vercel Postgres
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -42,7 +42,9 @@ model ExcelFile {
   fileSize         Int
   rowCount         Int?     @default(0)
   uploadDate       DateTime @default(now())
-  originalStructure Json?   // JSON supported by PostgreSQL
+  originalStructure Json?   // JSON for PostgreSQL
+  columnMapping    Json?    // Applied column mapping for this file
+  detectedHeaders  Json?    // Headers detected in this file
   rows             ExcelRow[]
   aggregated       AggregatedItem[]
 
@@ -77,7 +79,7 @@ model AggregatedItem {
   unit        String
   fileId      String?
   file        ExcelFile? @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  sourceFiles String?    // JSON array of file IDs
+  sourceFiles Json?      // JSON array of file IDs
   count       Int?       @default(1)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -90,4 +92,24 @@ model AggregatedItem {
   @@index([updatedAt]) // For recently updated items
   @@index([count]) // For count-based queries
   @@map("aggregated_items")
+}
+
+model ColumnMapping {
+  id          String   @id @default(cuid())
+  name        String   // User-friendly name for this mapping
+  description String?  // Optional description
+  isDefault   Boolean  @default(false)
+  mapping     Json     // Column mapping configuration as JSON
+  headers     Json?    // Sample headers this mapping was created for
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Track usage
+  usageCount  Int      @default(0)
+  lastUsed    DateTime?
+  
+  @@index([isDefault])
+  @@index([usageCount])
+  @@index([lastUsed])
+  @@map("column_mappings")
 }

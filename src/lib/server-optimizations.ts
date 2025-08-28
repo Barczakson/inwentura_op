@@ -348,16 +348,20 @@ export function withErrorHandling<T extends any[], R>(
 }
 
 /**
- * Connection pool configuration for Prisma
+ * Connection pool configuration for Prisma on Vercel + Supabase
  */
 export const DATABASE_CONFIG = {
-  // Optimized for serverless/edge environments
-  connection_limit: 5,        // Conservative limit for serverless
-  pool_timeout: 10,          // 10 seconds
+  // Optimized for Vercel serverless functions + Supabase pooling
+  connection_limit: 1,        // Required for Vercel serverless
+  pool_timeout: 20,          // 20 seconds for pooled connections
   statement_timeout: '30s',   // 30 seconds for complex queries
   
   // Query optimization
   query_logging: process.env.NODE_ENV === 'development',
   log_slow_queries: true,
   slow_query_threshold: 1000, // 1 second
+  
+  // Vercel/Supabase specific settings
+  ssl_mode: 'require',       // SSL required for Supabase
+  pgbouncer: true,          // Enable pgBouncer compatibility
 } as const

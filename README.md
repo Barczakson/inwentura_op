@@ -1,44 +1,41 @@
-# Excel Inventory Manager
+# Excel Data Manager - Cloud Edition
 
-A powerful inventory management application that processes Excel files and automatically aggregates data based on item names and IDs. This tool helps you manage inventory from various Excel formats with a flexible column mapping feature.
+A comprehensive Next.js 15 application for uploading, processing, and managing Excel data with real-time features and cloud deployment capabilities. Successfully deployed on Vercel with Supabase PostgreSQL backend.
 
 ## 🚀 Features
 
-- **📈 Excel Processing**: Upload and process Excel files (.xlsx, .xls)
-- **🔄 Automatic Aggregation**: Automatically combines items with the same name/ID
-- **📊 Data Management**: Edit, delete, and export inventory items
-- **📱 Responsive UI**: Works on all device sizes with dark mode support
-- **📁 Flexible Column Mapping**: Handle various Excel file structures with our column mapping interface
-- **💾 Database Storage**: Persistent storage using Prisma ORM with SQLite
-- **🔌 Real-time Updates**: WebSocket integration for live data updates
+- **📈 Excel Processing**: Upload and parse .xlsx/.xls files with automatic data extraction
+- **🔄 Data Aggregation**: Intelligent grouping by item ID, name, and unit with quantity summation
+- **📊 Interactive Management**: Edit, delete, and export functionality with TanStack Table
+- **📱 Responsive Design**: Mobile-first UI with dark mode support
+- **🗂️ Structure Preservation**: Maintains original Excel format for perfect export recreation
+- **💾 Cloud Database**: Supabase PostgreSQL with optimized connection pooling
+- **🔌 Real-time Communication**: Socket.IO integration for live updates
+- **⚡ Serverless Ready**: Optimized for Vercel deployment with runtime migration checks
 
 ## ✨ Technology Stack
 
-This scaffold provides a robust foundation built with:
+### 🎯 Frontend
+- **⚡ Next.js 15** - App Router with React Server Components
+- **📘 TypeScript 5** - Full type safety across the application
+- **🎨 Tailwind CSS 4** - Utility-first CSS with modern features
+- **🧩 shadcn/ui** - High-quality components built on Radix UI
+- **📊 TanStack Table** - Powerful data tables with editing capabilities
+- **📈 Recharts** - Beautiful charts and data visualization
+- **🐻 Zustand** - Lightweight state management
+- **🔄 TanStack Query** - Server state synchronization
 
-### 🎯 Core Framework
-- **⚡ Next.js 15** - The React framework for production with App Router
-- **📘 TypeScript 5** - Type-safe JavaScript for better developer experience
-- **🎨 Tailwind CSS 4** - Utility-first CSS framework for rapid UI development
+### 🗄️ Backend & Database
+- **🗄️ Prisma ORM** - Type-safe database client with PostgreSQL
+- **🐘 Supabase** - Managed PostgreSQL with real-time capabilities
+- **🔌 Socket.IO** - Real-time WebSocket communication
+- **📊 Custom Server** - Node.js server combining Next.js + Socket.IO
 
-### 🧩 UI Components & Styling
-- **🧩 shadcn/ui** - High-quality, accessible components built on Radix UI
-- **🎯 Lucide React** - Beautiful & consistent icon library
-- **🌈 Framer Motion** - Production-ready motion library for React
-- **🎨 Next Themes** - Perfect dark mode in 2 lines of code
-
-### 📋 Forms & Validation
-- **🎣 React Hook Form** - Performant forms with easy validation
-- **✅ Zod** - TypeScript-first schema validation
-
-### 🔄 State Management & Data Fetching
-- **🐻 Zustand** - Simple, scalable state management
-- **🔄 TanStack Query** - Powerful data synchronization for React
-- **🌐 Axios** - Promise-based HTTP client
-
-### 🗄️ Database & Backend
-- **🗄️ Prisma** - Next-generation Node.js and TypeScript ORM
-- **🔐 NextAuth.js** - Complete open-source authentication solution
+### ☁️ Deployment & Infrastructure
+- **⚡ Vercel** - Serverless functions with edge computing
+- **🔗 Connection Pooling** - Optimized for serverless with Supabase pooler
+- **🛡️ Runtime Migrations** - Database verification at runtime
+- **🌍 IPv4 Compatible** - Configured for Vercel's network requirements
 
 ### 🎨 Advanced UI Features
 - **📊 TanStack Table** - Headless UI for building tables and datagrids
@@ -51,36 +48,47 @@ This scaffold provides a robust foundation built with:
 - **📅 Date-fns** - Modern JavaScript date utility library
 - **🪝 ReactUse** - Collection of essential React hooks for modern development
 
-## 🎯 Why This Scaffold?
-
-- **🏎️ Fast Development** - Pre-configured tooling and best practices
-- **🎨 Beautiful UI** - Complete shadcn/ui component library with advanced interactions
-- **🔒 Type Safety** - Full TypeScript configuration with Zod validation
-- **📱 Responsive** - Mobile-first design principles with smooth animations
-- **🗄️ Database Ready** - Prisma ORM configured for rapid backend development
-- **🔐 Auth Included** - NextAuth.js for secure authentication flows
-- **📊 Data Visualization** - Charts, tables, and drag-and-drop functionality
-- **🌍 i18n Ready** - Multi-language support with Next Intl
-- **🚀 Production Ready** - Optimized build and deployment settings
-- **🤖 AI-Friendly** - Structured codebase perfect for AI assistance
-
 ## 🚀 Quick Start
 
-```bash
-# Install dependencies
-npm install
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+- Supabase account
+- Vercel account (for deployment)
 
-# Start development server
-npm run dev
+### Local Development
 
-# Build for production
-npm run build
+1. **Clone and Install**
+   ```bash
+   git clone <repository-url>
+   cd excel-data-manager
+   npm install
+   ```
 
-# Start production server
-npm start
-```
+2. **Environment Setup**
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Update `.env` with your Supabase credentials:
+   ```env
+   # Use pooler URLs for Vercel compatibility
+   DATABASE_URL="postgres://postgres.[PROJECT-REF]:[PASSWORD]@aws-1-eu-north-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
+   DIRECT_URL="postgres://postgres.[PROJECT-REF]:[PASSWORD]@aws-1-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=require"
+   ```
 
-Open [http://localhost:3000](http://localhost:3000) to see your application running.
+3. **Database Setup**
+   ```bash
+   npm run db:push      # Push schema to Supabase
+   npm run db:generate  # Generate Prisma client
+   ```
+
+4. **Start Development**
+   ```bash
+   npm run dev  # Custom server with Socket.IO
+   ```
+
+Open [http://localhost:3000](http://localhost:3000) to see your application.
 
 ## 🤖 Powered by Z.ai
 

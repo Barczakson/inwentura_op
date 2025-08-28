@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
         name: cleanName,
         quantity,
         unit: cleanUnit,
-        sourceFiles: JSON.stringify([]), // Manual entries have no source files
+        sourceFiles: [], // Manual entries have no source files
         count: 1 // First manual entry for this item
       }
     })
