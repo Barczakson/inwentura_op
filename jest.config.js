@@ -43,6 +43,7 @@ const customJestConfig = {
         '<rootDir>/src/hooks/**/*.{test,spec}.{js,jsx,ts,tsx}',
         '<rootDir>/src/lib/**/*.{test,spec}.{js,jsx,ts,tsx}',
         '<rootDir>/src/lib/__tests__/**/*.{js,jsx,ts,tsx}',
+        '<rootDir>/src/tests/**/*.{test,spec}.{js,jsx,ts,tsx}',
       ],
       testPathIgnorePatterns: [
         '<rootDir>/src/app/api/',
