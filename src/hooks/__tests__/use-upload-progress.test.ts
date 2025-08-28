@@ -25,22 +25,22 @@ class MockXMLHttpRequest {
   public status = 200
   public responseText = ''
   public readyState = 4
-  private listeners: { [key: string]: Function[] } = {}
+  private listeners: { [key: string]: Array<(...args: any[]) => void> } = {}
 
   constructor() {
-    this.upload.addEventListener = jest.fn((event: string, callback: Function) => {
+    this.upload.addEventListener = jest.fn((event: string, callback: (...args: any[]) => void) => {
       if (!this.upload.listeners) this.upload.listeners = {}
       if (!this.upload.listeners[event]) this.upload.listeners[event] = []
       this.upload.listeners[event].push(callback)
     })
   }
 
-  addEventListener(event: string, callback: Function) {
+  addEventListener(event: string, callback: (...args: any[]) => void) {
     if (!this.listeners[event]) this.listeners[event] = []
     this.listeners[event].push(callback)
   }
 
-  removeEventListener(event: string, callback: Function) {
+  removeEventListener(event: string, callback: (...args: any[]) => void) {
     if (this.listeners[event]) {
       this.listeners[event] = this.listeners[event].filter(cb => cb !== callback)
     }
@@ -66,7 +66,7 @@ class MockXMLHttpRequest {
 
   triggerUploadProgress(loaded: number, total: number) {
     if (this.upload.listeners && this.upload.listeners['progress']) {
-      this.upload.listeners['progress'].forEach((callback: Function) => 
+      this.upload.listeners['progress'].forEach((callback: (...args: any[]) => void) => 
         callback({ loaded, total, lengthComputable: true })
       )
     }
@@ -357,7 +357,7 @@ describe('useUploadProgress Hook', () => {
     // Simulate progress event without lengthComputable
     act(() => {
       if (mockXHR.upload.listeners && mockXHR.upload.listeners['progress']) {
-        mockXHR.upload.listeners['progress'].forEach((callback: Function) => 
+        mockXHR.upload.listeners['progress'].forEach((callback: (...args: any[]) => void) => 
           callback({ loaded: 50, total: 100, lengthComputable: false })
         )
       }
