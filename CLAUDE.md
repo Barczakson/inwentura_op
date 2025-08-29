@@ -1,243 +1,203 @@
 # CLAUDE.md
 
-This file provides comprehensive guidance to Claude Code (claude.ai/code) when working with this Excel Data Manager application.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-This is a **production-ready Excel Data Manager** application successfully deployed on Vercel with Supabase PostgreSQL. The application processes Excel files, aggregates data intelligently, and provides real-time management capabilities.
-
-**Core Purpose:**
-- Upload and process Excel inventory files (.xlsx/.xls)
-- Automatically aggregate items by ID, name, and unit
-- Maintain original Excel structure for perfect export recreation
-- Provide real-time collaborative data management
-- Deploy seamlessly to cloud infrastructure
-
-**Key Features:**
-- ✅ Excel file upload with structure preservation
-- ✅ Intelligent data aggregation across multiple files
-- ✅ Real-time WebSocket communication via Socket.IO
-- ✅ Interactive data tables with editing capabilities
-- ✅ Export functionality that recreates original Excel format
-- ✅ Unit conversion system for improved UX
-- ✅ Manual data entry for additional items
-- ✅ Cloud deployment optimized for Vercel + Supabase
-
-## Architecture & Deployment Status
-
-**✅ Successfully Deployed Architecture:**
-- **Frontend:** Next.js 15 with App Router, TypeScript, Tailwind CSS 4
-- **Backend:** Custom Node.js server combining Next.js + Socket.IO
-- **Database:** Supabase PostgreSQL with optimized connection pooling
-- **Deployment:** Vercel serverless functions with runtime migration checks
-- **State Management:** Zustand + TanStack Query
-- **UI Components:** shadcn/ui built on Radix UI primitives
+This is an Excel Inventory Manager - a comprehensive Next.js 15 application for uploading, processing, and managing Excel data with real-time features and cloud deployment capabilities. The application features intelligent Excel file processing, flexible column mapping, monthly inventory comparisons, and real-time WebSocket communication.
 
 ## Development Commands
 
+### Primary Development
 ```bash
-# Development (with custom server + Socket.IO)
-npm run dev              # Start development server with nodemon + Socket.IO
-
-# Database operations (Supabase PostgreSQL)
-npm run db:push          # Push schema changes to Supabase
-npm run db:generate      # Generate Prisma client
-npm run db:migrate       # Run migrations locally
-npm run db:studio        # Open Prisma Studio
-npm run db:seed          # Seed database
-npm run db:deploy        # Deploy migrations to production
-
-# Production & Build
-npm run build           # Build for production (includes Prisma generation)
-npm run start          # Production server with Socket.IO
-npm run vercel-build   # Vercel build command (generates + migrates + builds)
-
-# Utilities
-npm run lint
-npm run test
+npm run dev          # Start development server with custom Node.js server + Socket.IO
+npm run build        # Production build
+npm run start        # Production server
+npm run lint         # ESLint code checking
 ```
 
-## Custom Server Architecture (Production-Ready)
-
-**✅ Successfully Deployed Custom Server:**
-- **Server File:** `server.ts` combines Next.js + Socket.IO
-- **Development:** Nodemon watches `server.ts` with hot-reload
-- **Production:** TSX executes server in production environment
-- **Socket.IO Path:** `/api/socketio` with CORS configuration
-- **Request Routing:** Skips Socket.IO requests from Next.js handler
-- **Graceful Shutdown:** Proper cleanup on SIGTERM/SIGINT
-
-## Database Schema (Supabase PostgreSQL)
-
-**✅ Production Database Models:**
-
-### Core Tables
-- **`ExcelFile`**: File metadata with original structure preservation
-  - `originalStructure`: JSON field storing exact Excel layout
-  - `columnMapping`: Applied mapping configuration
-  - `detectedHeaders`: Automatically detected column headers
-
-- **`ExcelRow`**: Raw data rows from Excel files
-  - `originalRowIndex`: Preserves exact position in source file
-  - Indexed for performance: `[itemId, name, unit]`, `[fileId]`
-
-- **`AggregatedItem`**: Intelligent aggregation results
-  - Unique constraint: `(itemId, name, unit)`
-  - `sourceFiles`: JSON array tracking source file IDs
-  - `count`: Number of aggregated entries
-
-- **`ColumnMapping`**: Flexible mapping configurations
-  - Reusable mapping templates
-  - Usage tracking and analytics
-
-**Key Production Optimizations:**
-- ✅ JSON fields for PostgreSQL compatibility
-- ✅ Proper indexing for query performance
-- ✅ Cascade deletions for data integrity
-- ✅ Connection pooling optimized for serverless
-
-## API Routes Structure (Production-Optimized)
-
-**✅ Production API Endpoints:**
-```
-/api/excel/
-├── upload/     # POST: Upload + process Excel with structure preservation
-├── data/       # GET: Fetch with pagination, PUT: Update, DELETE: Remove
-├── files/      # GET: List files with metadata, DELETE: Remove with cleanup
-├── export/     # GET: Export with original Excel format recreation
-├── manual/     # POST: Add manual entries with validation
-└── column-mapping/ # POST: Dynamic column mapping configurations
+### Testing Commands
+```bash
+npm test             # Run all tests
+npm run test:watch   # Tests in watch mode
+npm run test:coverage # Coverage report
+npm run test:column-mapping # Test column mapping functionality specifically
+npm run test:api     # Run server/API tests only
+npm run test:client  # Run client/React tests only
+npm run test:integration # Integration tests
 ```
 
-**Runtime Features:**
-- ✅ **Runtime Migration Checks**: `ensureMigrationsRun()` in each route
-- ✅ **Connection Pooling**: Optimized for Vercel serverless functions
-- ✅ **Error Handling**: Comprehensive try-catch with proper HTTP codes
-- ✅ **Performance Monitoring**: Built-in timing and optimization
-- ✅ **Data Validation**: Input sanitization and type checking
+### Database Commands
+```bash
+npm run db:push      # Push schema to database (development)
+npm run db:generate  # Generate Prisma client
+npm run db:migrate   # Run database migrations
+npm run db:reset     # Reset development database
+npm run db:studio    # Open Prisma Studio (database GUI)
+npm run db:seed      # Seed database with test data
+npm run db:deploy    # Deploy migrations to production
+```
 
-## Key Components (Production-Ready)
+### Deployment Commands
+```bash
+npm run vercel-build # Vercel-specific build with database migrations
+npm run db:migrate:deploy # Deploy database migrations to production
+```
 
-**✅ Core UI Components:**
-- **`DataTable`** (`/components/data-table.tsx`): TanStack Table with real-time editing
-- **`DataCharts`** (`/components/data-charts.tsx`): Recharts with responsive design
-- **`EditItemDialog`** (`/components/edit-item-dialog.tsx`): Modal editing interface
-- **`FileUpload`**: Drag-and-drop with progress indicators
-- **`ExportButton`**: One-click Excel export with format preservation
+## Architecture
 
-**✅ Core Libraries:**
-- **`/lib/db-config.ts`**: PostgreSQL-optimized Prisma configuration
-- **`/lib/migrate.ts`**: Runtime migration system for Vercel deployment
-- **`/lib/server-optimizations.ts`**: Connection pooling and performance utilities
-- **`/lib/unit-conversion.ts`**: Smart weight/volume conversion system
+### Tech Stack
+- **Frontend**: Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS 4
+- **UI Components**: shadcn/ui based on Radix UI
+- **Backend**: Custom Node.js server integrating Next.js + Socket.IO
+- **Database**: PostgreSQL (production) / SQLite (development) with Prisma ORM
+- **Real-time**: Socket.IO for WebSocket communication
+- **File Processing**: XLSX library for Excel file parsing
+- **State Management**: TanStack Query + Zustand
+- **Testing**: Jest with Testing Library, dual environments (jsdom/node)
 
-## Excel Processing Logic (Production-Optimized)
+### Key Features Architecture
+- **Flexible Excel Upload**: Column mapping interface supporting various Excel structures
+- **Data Aggregation**: Automatic grouping by (itemId, name, unit) with quantity summation
+- **Monthly Comparison**: Dedicated `/comparison` page for analyzing inventory changes
+- **Real-time Updates**: WebSocket integration for live data synchronization
+- **Unit Conversion**: Smart display optimization (1000g → 1kg)
 
-**✅ Advanced Processing Pipeline:**
-1. **File Upload:** XLSX parsing with complete structure preservation
-2. **Data Extraction:** Smart recognition of Excel categories and data sections
-3. **Structure Preservation:** `originalStructure` JSON field stores exact layout
-4. **Intelligent Aggregation:** Real-time grouping by itemId + name + unit
-5. **Database Optimization:** Batch operations with connection pooling
-6. **Export Recreation:** Perfect recreation of original Excel format with aggregated data
+## Database Schema
 
-**✅ Production Features:**
-- **Memory Efficiency:** Chunked processing for large files (5000+ rows)
-- **Error Recovery:** Graceful handling of malformed Excel files
-- **Performance Monitoring:** Built-in timing and optimization tracking
-- **Unit Normalization:** Smart conversion (1000g → 1kg) with original preservation
+The application uses Prisma with 6 main models:
+- **ExcelFile**: Stores uploaded file metadata and column mappings
+- **ExcelRow**: Raw Excel data with original structure preserved
+- **AggregatedItem**: Processed inventory data with unique constraint on (itemId, name, unit)
+- **ColumnMapping**: Saved column mapping configurations for reuse
+- **User**: Basic user model (for future authentication)
+- **Post**: Basic post model (legacy, can be removed)
 
-## Deployment Success & Architecture (2025)
+### Database Environment
+- **Development**: SQLite (`file:./prisma/dev.db`)
+- **Production**: PostgreSQL with Supabase, optimized for Vercel with connection pooling
 
-### ✅ **Vercel + Supabase Migration (Completed)**
-- **Database Migration:** Successfully moved from SQLite to Supabase PostgreSQL
-- **Connection Optimization:** Implemented proper pooling for serverless functions
-- **IPv4 Compatibility:** Configured for Vercel's network requirements
-- **Runtime Migrations:** Deployed with runtime database verification
-- **Build Optimization:** Removed build-time migrations to prevent authentication errors
+## Development Workflow
 
-### ✅ **Key Technical Achievements**
-- **Authentication Fixed:** Resolved "Tenant or user not found" errors
-- **Connection Pooling:** `connection_limit=1` optimized for serverless
-- **SSL Configuration:** Proper `sslmode=require` for Supabase connections
-- **TypeScript Compatibility:** All SQLite references converted to PostgreSQL
-- **Performance Optimized:** Runtime checks ensure database availability
+### Server Architecture
+The application uses a custom Node.js server (`server.ts`) that combines:
+- Next.js application handling
+- Socket.IO server for real-time features
+- Custom middleware for WebSocket integration
 
-## Socket.IO Integration (Production-Ready)
+### Testing Structure
+Jest is configured with two separate environments:
+- **Client tests** (`jsdom`): Components, hooks, utilities
+- **Server tests** (`node`): API routes, database integration
 
-**✅ Real-time Communication:**
-- **Setup:** Custom server with Socket.IO at `/api/socketio`
-- **CORS Configuration:** Properly configured for Vercel deployment
-- **Transport Optimization:** WebSocket with fallback transports
-- **Connection Management:** Automatic reconnection and error handling
-- **Production Features:** Optimized timeouts and connection limits
+### Column Mapping System
+The flexible Excel upload feature uses pattern-based auto-detection:
+- **Item ID**: Patterns like "nr", "indeks", "id"
+- **Name**: Patterns like "nazwa", "towar", "produkt", "item"
+- **Quantity**: Numeric columns with headers containing "ilo", "quantity", "amount"
+- **Unit**: Standard units like "kg", "g", "l", "ml", "szt"
 
-## Development Patterns (Production-Tested)
+## File Structure
 
-**✅ Established Patterns:**
-- **Error Handling:** Comprehensive try-catch with proper HTTP status codes
-- **Data Fetching:** Prisma ORM with TanStack Query for caching
-- **File Handling:** React Dropzone with progress tracking
-- **State Management:** Zustand for client state, TanStack Query for server state
-- **Database Operations:** Connection pooling with runtime migration checks
-- **Performance:** Built-in monitoring and optimization utilities
+```
+src/
+├── app/                     # Next.js App Router
+│   ├── api/excel/          # Excel processing API routes
+│   │   ├── upload/         # File upload endpoint
+│   │   ├── data/           # CRUD operations
+│   │   ├── export/         # Export functionality
+│   │   └── column-mapping/ # Column mapping API
+│   ├── comparison/         # Monthly comparison page
+│   └── page.tsx            # Main upload/management page
+├── components/
+│   ├── ui/                 # shadcn/ui components
+│   ├── column-mapping.tsx  # Column mapping interface
+│   ├── data-table.tsx      # Main data table with editing
+│   ├── data-charts.tsx     # Data visualization
+│   └── virtualized-data-table.tsx # Performance-optimized table
+├── lib/
+│   ├── db-config.ts        # Database configuration
+│   ├── unit-conversion.ts  # Smart unit conversion logic
+│   ├── column-detection.ts # Auto column type detection
+│   └── socket.ts           # Socket.IO setup
+└── hooks/                  # Custom React hooks
+```
 
-## Important Deployment Notes
+## Key Implementation Details
 
-**✅ Production Configuration:**
-- **Database:** Supabase PostgreSQL with pooler URLs for IPv4 compatibility
-- **Server:** Custom server required - always use `npm run dev` (not `next dev`)
-- **Build Process:** Includes Prisma generation and optimized for Vercel
-- **Connection Strings:** Use transaction pooler (port 6543) and session pooler (port 5432)
-- **Runtime Migrations:** Database verification happens at API route level
-- **Environment Variables:** Properly configured for Vercel with sensitive data protection
+### Excel Processing Flow
+1. File upload validation (type, size)
+2. Excel parsing with XLSX library
+3. Column mapping interface (auto-detection + manual adjustment)
+4. Data validation and type conversion
+5. Aggregation by (itemId, name, unit)
+6. Database storage (both raw and aggregated)
 
-## Troubleshooting Resources
+### Real-time Features
+- WebSocket server at `/api/socketio`
+- Real-time data updates across clients
+- Connection status monitoring
+- Graceful reconnection handling
 
-**📚 Available Documentation:**
-- `TROUBLESHOOTING.md` - Database connection and authentication issues
-- `DEPLOYMENT.md` - Vercel deployment and IPv4 compatibility
-- `README.md` - Complete setup and usage guide
+### Performance Considerations
+- Virtual scrolling for large datasets (virtualized-data-table.tsx)
+- Database indexing on key fields
+- Connection pooling for serverless deployment
+- Chunked data processing for large Excel files
 
-**🔧 Common Solutions:**
-- Authentication errors: Check connection string format and Supabase status
-- Build failures: Verify TypeScript compatibility and environment variables
-- Performance issues: Review connection pooling and runtime migration settings
+## Environment Setup
 
----
+### Development
+Create `.env.local`:
+```env
+DATABASE_URL="file:./prisma/dev.db"
+DIRECT_URL="file:./prisma/dev.db"
+```
 
-## 🚀 **DEPLOYMENT STATUS: SUCCESSFUL** 
+### Production (Vercel + Supabase)
+```env
+DATABASE_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&pool_timeout=20&sslmode=require"
+DIRECT_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].pooler.supabase.com:5432/postgres?sslmode=require"
+```
 
-✅ **Application successfully deployed to Vercel with Supabase PostgreSQL**  
-✅ **All authentication and connection issues resolved**  
-✅ **Runtime migration system working properly**  
-✅ **TypeScript compilation successful**  
-✅ **Production-ready with optimized performance**  
+## Common Development Tasks
 
----
+### Adding New API Endpoints
+- Place in `src/app/api/` following Next.js App Router conventions
+- Use server environment tests (`npm run test:api`)
+- Follow existing error handling patterns
 
-## Important Instructions for Claude Code
+### Working with Database
+- Always run `npm run db:generate` after schema changes
+- Use `npm run db:studio` to inspect data visually
+- Test migrations with `npm run db:push` before deployment
 
-**✅ PROJECT STATUS: PRODUCTION-READY**
-- This is a **successfully deployed** application on Vercel + Supabase
-- All major technical challenges have been resolved
-- Database is properly configured with connection pooling
-- Build process is optimized for serverless deployment
+### Component Development
+- Use shadcn/ui components as base (`@/components/ui/`)
+- Follow existing patterns for data tables and forms
+- Test with client environment (`npm run test:client`)
 
-**🔧 DEVELOPMENT GUIDELINES:**
-- Always use `npm run dev` (never `next dev`) due to custom server
-- Database operations use Prisma with PostgreSQL optimizations
-- Runtime migration checks ensure database availability
-- Connection pooling configured for Vercel serverless functions
+### Socket.IO Integration
+- Server setup in `src/lib/socket.ts`
+- Client usage examples in main page components
+- Real-time updates follow established patterns
 
-**📋 CONTEXT AWARENESS:**
-- App migrated from SQLite to Supabase PostgreSQL (completed)
-- IPv4 compatibility issues resolved for Vercel deployment
-- Authentication errors fixed with proper connection string format
-- TypeScript compatibility ensured across all database operations
+## Deployment Notes
 
-**⚠️ CRITICAL REMINDERS:**
-- Do what has been asked; nothing more, nothing less
-- ALWAYS prefer editing existing files over creating new ones
-- NEVER proactively create documentation unless explicitly requested
-- Reference existing documentation in troubleshooting scenarios
+### Vercel Deployment
+- Uses `npm run vercel-build` which includes database migrations
+- Requires Supabase PostgreSQL with connection pooling
+- Environment variables must be set in Vercel dashboard
+
+### Database Migrations
+- Development: `npm run db:push` for schema changes
+- Production: `npm run db:deploy` for migration deployment
+- Always test migrations locally first
+
+## Testing Guidelines
+
+- Comprehensive test coverage for Excel processing logic
+- Integration tests for database operations
+- Component testing with Testing Library
+- Separate test environments prevent cross-contamination
+- Column mapping functionality has dedicated test suite

@@ -21,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Upload, FileSpreadsheet, Plus, Edit, Trash2, Download, BarChart, X } from 'lucide-react'
+import { Upload, FileSpreadsheet, Plus, Edit, Trash2, Download, BarChart, X, Search } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { DataTable } from '@/components/data-table'
 
@@ -748,7 +748,20 @@ export default function Home() {
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold">Manager Inwentury Excel</h1>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex-1"></div>
+            <div className="text-center">
+              <h1 className="text-3xl font-bold">Manager Inwentury Excel</h1>
+            </div>
+            <div className="flex-1 flex justify-end">
+              <Link href="/search">
+                <Button variant="outline" className="gap-2">
+                  <Search className="h-4 w-4" />
+                  Advanced Search
+                </Button>
+              </Link>
+            </div>
+          </div>
           <p className="text-muted-foreground">
             {currentView === 'file' 
               ? `Widok pliku: ${currentFileName}`
