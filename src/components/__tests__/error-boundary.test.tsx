@@ -766,8 +766,11 @@ describe('Error Boundary and Error Handling Tests', () => {
       // Wait for potential success (70% success rate in component)
       await waitFor(() => {
         // Either success or failure should have occurred
-        expect(toast.success).toHaveBeenCalledWith('Reconnected successfully') ||
-        expect(toast.error).toHaveBeenCalled();
+        try {
+          expect(toast.success).toHaveBeenCalledWith('Reconnected successfully');
+        } catch (e) {
+          expect(toast.error).toHaveBeenCalled();
+        }
       }, { timeout: 1000 });
     });
 

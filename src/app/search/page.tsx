@@ -310,7 +310,7 @@ function SearchPageContent() {
                   <Badge variant="outline">{stats.uniqueUnits.length}</Badge>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Quantity Range: {formatQuantityWithConversion(stats.quantityRange.min)} - {formatQuantityWithConversion(stats.quantityRange.max)}
+                  Quantity Range: {formatQuantityWithConversion(stats.quantityRange.min, '')} - {formatQuantityWithConversion(stats.quantityRange.max, '')}
                 </div>
               </CardContent>
             </Card>

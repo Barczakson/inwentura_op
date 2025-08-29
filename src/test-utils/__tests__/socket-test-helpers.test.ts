@@ -14,13 +14,11 @@ import {
 } from '../socket-test-helpers';
 
 // Extend Jest matchers (in a real setup, this would be in setupTests.js)
-declare global {
-  namespace jest {
-    interface Matchers<R> {
-      toHaveReceivedEvent(eventType: string): R;
-      toHaveEmittedEvent(eventType: string): R;
-      toHaveConnectedClients(expectedCount: number): R;
-    }
+declare module 'jest' {
+  interface Matchers<R> {
+    toHaveReceivedEvent(eventType: string): R;
+    toHaveEmittedEvent(eventType: string): R;
+    toHaveConnectedClients(expectedCount: number): R;
   }
 }
 

@@ -9,6 +9,7 @@
  * - Integration with React components
  */
 
+import React from 'react';
 import { Server as SocketIOServer } from 'socket.io';
 import { io as SocketIOClient } from 'socket.io-client';
 import { createServer } from 'http';
@@ -30,7 +31,7 @@ export interface SocketTestConfig {
 
 export class SocketTestServer {
   private httpServer: any;
-  private io: SocketIOServer;
+  private io!: SocketIOServer;
   private port: number = 0;
   private events: MockSocketEvent[] = [];
   private connectedSockets: Map<string, any> = new Map();
@@ -577,7 +578,7 @@ export const createSocketTestProvider = (port: number) => {
   return ({ children }: { children: React.ReactNode }) => {
     // This would typically wrap children with a SocketContext provider
     // For now, it's a placeholder that could be extended based on your app structure
-    return <div data-testid="socket-provider" data-port={port}>{children}</div>;
+    return React.createElement('div', { 'data-testid': 'socket-provider', 'data-port': port }, children);
   };
 };
 
@@ -657,9 +658,4 @@ export class SocketTestManager {
 }
 
 // Export everything
-export {
-  SocketTestServer,
-  SocketTestClient,
-  SocketTestScenarios,
-  SocketTestManager
-};
+export {};

@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         : { contains: searchTerm, mode: 'insensitive' as const }
       
       // Search in name, itemId, and if available, description
-      const searchConditions = [
+      const searchConditions: any[] = [
         { name: searchOptions },
         { itemId: searchOptions }
       ]
@@ -261,6 +261,11 @@ export async function POST(request: NextRequest) {
         const aValue = a[sortField as keyof typeof a]
         const bValue = b[sortField as keyof typeof b]
         
+        // Handle null/undefined values
+        if (aValue == null && bValue == null) return 0
+        if (aValue == null) return sortDir === 'asc' ? -1 : 1
+        if (bValue == null) return sortDir === 'asc' ? 1 : -1
+        
         if (aValue < bValue) return sortDir === 'asc' ? -1 : 1
         if (aValue > bValue) return sortDir === 'asc' ? 1 : -1
         return 0
@@ -374,7 +379,7 @@ export async function GET(request: NextRequest) {
         const itemIdSuggestions = await db.aggregatedItem.findMany({
           where: { 
             itemId: searchOptions,
-            itemId: { not: null }
+            NOT: { itemId: null }
           },
           select: { itemId: true, name: true },
           take: Math.ceil(limit / 3),

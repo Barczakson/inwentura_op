@@ -18,7 +18,8 @@ import {
 } from '../../../__mocks__/socket.io';
 
 // Mock the Socket.IO module
-jest.mock('socket.io', () => require('../../../__mocks__/socket.io'));
+import mockSocketIO from '../../../__mocks__/socket.io';
+jest.mock('socket.io', () => mockSocketIO);
 
 describe('Socket.IO Integration Tests', () => {
   let mockServer: any;

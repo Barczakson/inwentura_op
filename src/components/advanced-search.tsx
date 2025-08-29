@@ -45,9 +45,11 @@ export interface SearchFilters {
 
 export interface SearchSuggestion {
   text: string
-  type: 'recent' | 'suggestion' | 'saved'
+  type: 'recent' | 'suggestion' | 'saved' | 'item' | 'itemId' | 'unit' | 'file'
   filters?: SearchFilters
   count?: number
+  id?: string
+  description?: string
 }
 
 interface AdvancedSearchProps {
@@ -543,7 +545,7 @@ export function AdvancedSearch({
                       id="aggregated-only"
                       checked={filters.aggregatedOnly || false}
                       onCheckedChange={(checked) => {
-                        updateFilters({ aggregatedOnly: checked || undefined })
+                        updateFilters({ aggregatedOnly: checked === true ? true : undefined })
                       }}
                     />
                     <label

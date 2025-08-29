@@ -88,7 +88,7 @@ describe('Enhanced Database Integration Tests (Supabase-ready)', () => {
       
       // Simulate real-time listener setup
       const mockSocket = {
-        on: jest.fn((event: string, callback: Function) => {
+        on: jest.fn((event: string, callback: (...args: any[]) => void) => {
           if (event === 'data-sync') {
             updateEvents.push = callback;
           }
