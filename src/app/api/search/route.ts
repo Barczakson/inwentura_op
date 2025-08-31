@@ -190,61 +190,59 @@ export async function POST(request: NextRequest) {
     let results, total
     
     if (filters.aggregatedOnly) {
-      // Search only aggregated items
-      [results, total] = await Promise.all([
-        db.aggregatedItem.findMany({
-          where,
-          orderBy,
-          skip: offset,
-          take: validatedLimit,
-          include: {
-            file: {
-              select: {
-                id: true,
-                fileName: true,
-                uploadDate: true
-              }
+      // Search only aggregated items (sequential to respect low connection limits)
+      const aggregatedResults = await db.aggregatedItem.findMany({
+        where,
+        orderBy,
+        skip: offset,
+        take: validatedLimit,
+        include: {
+          file: {
+            select: {
+              id: true,
+              fileName: true,
+              uploadDate: true
             }
           }
-        }),
-        db.aggregatedItem.count({ where })
-      ])
+        }
+      })
+      const aggregatedTotal = await db.aggregatedItem.count({ where })
+      results = aggregatedResults
+      total = aggregatedTotal
     } else {
-      // Search both aggregated and raw items
-      const [aggregatedResults, rawResults, aggregatedTotal, rawTotal] = await Promise.all([
-        db.aggregatedItem.findMany({
-          where,
-          orderBy,
-          skip: offset,
-          take: Math.ceil(validatedLimit / 2), // Split results
-          include: {
-            file: {
-              select: {
-                id: true,
-                fileName: true,
-                uploadDate: true
-              }
+      // Search both aggregated and raw items (sequential to avoid pool timeouts)
+      const aggregatedResults = await db.aggregatedItem.findMany({
+        where,
+        orderBy,
+        skip: offset,
+        take: Math.ceil(validatedLimit / 2), // Split results
+        include: {
+          file: {
+            select: {
+              id: true,
+              fileName: true,
+              uploadDate: true
             }
           }
-        }),
-        db.excelRow.findMany({
-          where: { ...where },
-          orderBy,
-          skip: offset,
-          take: Math.floor(validatedLimit / 2),
-          include: {
-            file: {
-              select: {
-                id: true,
-                fileName: true,
-                uploadDate: true
-              }
+        }
+      })
+      const rawResults = await db.excelRow.findMany({
+        where: { ...where },
+        orderBy,
+        skip: offset,
+        take: Math.floor(validatedLimit / 2),
+        include: {
+          file: {
+            select: {
+              id: true,
+              fileName: true,
+              uploadDate: true
             }
           }
-        }),
-        db.aggregatedItem.count({ where }),
-        db.excelRow.count({ where: { ...where } })
-      ])
+        }
+      })
+      const aggregatedTotal = await db.aggregatedItem.count({ where })
+      const rawTotal = await db.excelRow.count({ where: { ...where } })
 
       // Combine and sort results
       const combinedResults = [
