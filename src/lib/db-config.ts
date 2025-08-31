@@ -51,6 +51,9 @@ export const db = globalForPrisma.prisma ?? new PrismaClient({
 try {
   if (attachDatabasePool) {
     attachDatabasePool(db as unknown as any)
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL === '1') {
+      console.log('attachDatabasePool: Prisma client attached')
+    }
   }
 } catch {
   // ignore

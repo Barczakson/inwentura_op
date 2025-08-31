@@ -29,6 +29,9 @@ const migrationClient = new PrismaClient({
 try {
   if (attachDatabasePool) {
     attachDatabasePool(migrationClient as unknown as any)
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL === '1') {
+      console.log('attachDatabasePool: migration Prisma client attached')
+    }
   }
 } catch {
   // ignore

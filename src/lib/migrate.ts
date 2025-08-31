@@ -9,7 +9,6 @@
  */
 
 import { db } from './db-config'
-import { verifyDatabaseSchema, createDatabaseSchema } from './deployment-migrate'
 
 let migrationAttempted = false
 let migrationSuccessful = false
@@ -19,6 +18,10 @@ let migrationSuccessful = false
  * This function ensures the database is ready for use in serverless environments
  */
 export async function ensureMigrationsRun(): Promise<void> {
+  // Allow disabling runtime init to avoid extra connections in serverless
+  if (process.env.DB_RUNTIME_INIT !== 'true') {
+    return
+  }
   // Only attempt once per function instance
   if (migrationAttempted) {
     if (!migrationSuccessful) {
@@ -33,7 +36,7 @@ export async function ensureMigrationsRun(): Promise<void> {
   
   try {
     console.log('Starting database initialization...')
-    
+
     // Test basic connection with timeout
     console.log('Testing database connection...')
     await Promise.race([
@@ -46,6 +49,8 @@ export async function ensureMigrationsRun(): Promise<void> {
     
     // Verify schema exists
     console.log('Verifying database schema...')
+    // Lazy-load migration helpers to avoid creating extra clients unless needed
+    const { verifyDatabaseSchema, createDatabaseSchema } = await import('./deployment-migrate')
     const schemaValid = await verifyDatabaseSchema()
     
     if (!schemaValid) {

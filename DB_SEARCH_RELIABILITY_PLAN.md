@@ -3,7 +3,8 @@
 - [x] Create plan file with steps
 - [x] Inspect env files for DB URLs
 - [x] Map Prisma usage and migrations
-- [ ] Design attachDatabasePool integration
+- [x] Design attachDatabasePool integration
+- [x] Add @vercel/functions dependency and logs
 - [x] Design sourceFiles filter fix
 - [x] Implement sourceFiles filter fix
 - [x] Outline monitoring additions
