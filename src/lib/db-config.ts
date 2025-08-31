@@ -6,6 +6,15 @@
  */
 
 import { PrismaClient } from '@prisma/client'
+
+// Optional Vercel integration: attachDatabasePool to avoid leaks when functions suspend
+let attachDatabasePool: ((pool: any) => void) | undefined
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  attachDatabasePool = require('@vercel/functions').attachDatabasePool
+} catch {
+  // Module not available locally; safe to ignore
+}
 import { DATABASE_CONFIG } from './server-optimizations'
 
 // Global Prisma instance with optimizations
@@ -33,6 +42,13 @@ export const db = globalForPrisma.prisma ?? new PrismaClient({
   // Error handling
   errorFormat: process.env.NODE_ENV === 'development' ? 'pretty' : 'minimal',
 })
+
+// Register the client with Vercel to prevent connection leaks on suspend (no-op if unavailable)
+try {
+  attachDatabasePool && attachDatabasePool(db as unknown as any)
+} catch {
+  // ignore
+}
 
 // Performance monitoring for database queries
 if (process.env.NODE_ENV === 'development' && DATABASE_CONFIG.query_logging) {

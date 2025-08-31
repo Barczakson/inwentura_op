@@ -9,16 +9,18 @@ export async function GET(request: NextRequest) {
     // Ensure database is ready (runtime migration check)
     await ensureMigrationsRun()
     
-    // Test database connection
-    try {
-      await db.$queryRaw`SELECT 1`;
-      console.log('Database connection: OK');
-    } catch (dbError) {
-      console.error('Database connection failed:', dbError);
-      return NextResponse.json(
-        { error: 'Database connection failed', details: dbError instanceof Error ? dbError.message : 'Unknown error' },
-        { status: 500 }
-      );
+    // Optional connection test (disabled by default in production)
+    if (process.env.DB_CHECK_ON_REQUEST === 'true') {
+      try {
+        await db.$queryRaw`SELECT 1`;
+        console.log('Database connection: OK');
+      } catch (dbError) {
+        console.error('Database connection failed:', dbError);
+        return NextResponse.json(
+          { error: 'Database connection failed', details: dbError instanceof Error ? dbError.message : 'Unknown error' },
+          { status: 500 }
+        );
+      }
     }
     
     const files = await queries.getExcelFiles({

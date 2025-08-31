@@ -126,15 +126,11 @@ export async function POST(request: NextRequest) {
       if (isSQLite) {
         conditions.push({ fileId: { in: filters.fileIds } })
       } else {
-        // PostgreSQL: search in both fileId and sourceFiles JSON array
+        // PostgreSQL: match where fileId is in list OR sourceFiles JSON array contains any of the IDs
         conditions.push({
           OR: [
             { fileId: { in: filters.fileIds } },
-            {
-              AND: filters.fileIds.map(fileId => ({
-                sourceFiles: { path: ['$[*]'], equals: fileId }
-              }))
-            }
+            ...filters.fileIds.map(fileId => ({ sourceFiles: { array_contains: fileId } }))
           ]
         })
       }

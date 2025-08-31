@@ -40,16 +40,18 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString()
     });
 
-    // Test database connection
-    try {
-      await db.$queryRaw`SELECT 1`;
-      console.log('Database connection: OK');
-    } catch (dbError) {
-      console.error('Database connection failed:', dbError);
-      return NextResponse.json(
-        { error: 'Database connection failed', details: dbError instanceof Error ? dbError.message : 'Unknown error' },
-        { status: 500 }
-      );
+    // Optional connection test (disabled by default in production)
+    if (process.env.DB_CHECK_ON_REQUEST === 'true') {
+      try {
+        await db.$queryRaw`SELECT 1`;
+        console.log('Database connection: OK');
+      } catch (dbError) {
+        console.error('Database connection failed:', dbError);
+        return NextResponse.json(
+          { error: 'Database connection failed', details: dbError instanceof Error ? dbError.message : 'Unknown error' },
+          { status: 500 }
+        );
+      }
     }
 
     // Build where clause for search and fileId
@@ -77,11 +79,11 @@ export async function GET(request: NextRequest) {
         // For SQLite, just match fileId directly (simpler approach)
         conditions.push({ fileId: fileId })
       } else {
-        // For PostgreSQL, use JSON path search for sourceFiles array
+        // For PostgreSQL, match where fileId equals OR sourceFiles JSON array contains the ID
         conditions.push({
           OR: [
             { fileId: fileId },
-            { sourceFiles: { path: ['$[*]'], equals: fileId } }
+            { sourceFiles: { array_contains: fileId } }
           ]
         })
       }

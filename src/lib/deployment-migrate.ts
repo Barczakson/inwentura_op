@@ -7,6 +7,14 @@
  */
 
 import { PrismaClient } from '@prisma/client'
+// Optional Vercel integration: attachDatabasePool
+let attachDatabasePool: ((pool: any) => void) | undefined
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  attachDatabasePool = require('@vercel/functions').attachDatabasePool
+} catch {
+  // ignore if not present
+}
 import { DATABASE_CONFIG } from './server-optimizations'
 
 // Create a dedicated Prisma client for migrations with optimized settings
@@ -14,6 +22,12 @@ const migrationClient = new PrismaClient({
   log: ['error', 'warn'],
   errorFormat: 'minimal',
 })
+
+try {
+  attachDatabasePool && attachDatabasePool(migrationClient as unknown as any)
+} catch {
+  // ignore
+}
 
 /**
  * Run database migrations at deployment time
