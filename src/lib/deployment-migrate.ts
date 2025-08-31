@@ -10,8 +10,11 @@ import { PrismaClient } from '@prisma/client'
 // Optional Vercel integration: attachDatabasePool
 let attachDatabasePool: ((pool: any) => void) | undefined
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  attachDatabasePool = require('@vercel/functions').attachDatabasePool
+  const req: any = eval('require')
+  const mod = req?.('@vercel/functions')
+  if (mod && typeof mod.attachDatabasePool === 'function') {
+    attachDatabasePool = mod.attachDatabasePool as (pool: any) => void
+  }
 } catch {
   // ignore if not present
 }
@@ -24,7 +27,9 @@ const migrationClient = new PrismaClient({
 })
 
 try {
-  attachDatabasePool && attachDatabasePool(migrationClient as unknown as any)
+  if (attachDatabasePool) {
+    attachDatabasePool(migrationClient as unknown as any)
+  }
 } catch {
   // ignore
 }
